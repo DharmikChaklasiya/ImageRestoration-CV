@@ -24,3 +24,4 @@ utm==0.7.0
 webdriver-manager==3.5.4
 webencodings==0.5.1
 zipp==3.4.1
+tqdm

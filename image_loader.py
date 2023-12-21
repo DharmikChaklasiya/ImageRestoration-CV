@@ -64,13 +64,14 @@ print(f"Will load data from rootdir: {root_dir}")
 
 # Create a list to store the image file paths
 all_image_groups = []
+image_group_map = {}
 
 focal_stack_indices = [0, 15, 30]
 
 # Iterate over the subfolders
 for root, dirs, files in os.walk(root_dir):
     for dir_name in dirs:
-        if dir_name.startswith("Part"):
+        if dir_name == "Part1":
             subfolder_path = os.path.join(root, dir_name)
 
             for formatted_image_index in os.listdir(subfolder_path):
@@ -78,6 +79,10 @@ for root, dirs, files in os.walk(root_dir):
                 img_group.initialize_output_only(subfolder_path, focal_stack_indices)
                 if img_group.valid:
                     all_image_groups.append(img_group)
+                    image_group_map[img_group.formatted_image_index] = img_group
+
+                #if len(all_image_groups) > 100:
+                   # break
 
 all_image_groups = sorted(all_image_groups, key=lambda img_group: int(img_group.formatted_image_index))
 
@@ -88,3 +93,7 @@ print(f"Successfully loaded image-batches - len : {len(dataset)}")
 
 def get_dataset():
     return dataset
+
+
+def get_image_group_map():
+    return image_group_map

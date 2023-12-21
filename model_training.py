@@ -1,19 +1,19 @@
 # Import necessary libraries
 import os
 import webbrowser
+import random
 
+import torch
 from torch import optim
 from torch.nn import functional as F
 from torch.utils.data import Subset
 from tqdm import tqdm
 
-from image_loader import get_dataset
+from image_loader import get_dataset, get_image_group_map
 from performance_visualization import update_html_for_epoch, ImagePerformance
 from unet_architecture import UNet
 
-import torch
-
-import random
+from torch.utils.data import DataLoader, random_split
 
 print(f"Using pytorch version: {torch.__version__}")
 print(f"Using pytorch cuda version: {torch.version.cuda}")
@@ -25,7 +25,18 @@ else:
     device = torch.device("cpu")
     print("Using CPU")
 
-dataloader = torch.utils.data.DataLoader(get_dataset(), batch_size=4, shuffle=False)
+# Define the ratio or number of items for the split
+train_size = int(0.8 * len(get_dataset()))  # 80% for training
+val_size = len(get_dataset()) - train_size  # 20% for validation
+
+# Split the dataset
+train_dataset, val_dataset = random_split(get_dataset(), [train_size, val_size])
+
+# Create DataLoaders for each set
+train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False)
+
+image_group_map = get_image_group_map()
 
 num_samples_for_eval = 100
 all_indices = list(range(len(get_dataset())))
@@ -42,14 +53,42 @@ loss_function = F.mse_loss  # or any other appropriate loss function
 optimizer = optim.Adam(model.parameters(), lr=0.001)  # learning rate
 
 # Number of training epochs
-num_epochs = 10
+num_epochs = 1000
+
+
+def evaluate_rows_print_images_to_report():
+    global inputs, ground_truth, outputs, loss, i
+    model.eval()
+    performance = []
+    with torch.no_grad():
+
+        eval_dataloader_with_progress = tqdm(eval_dataloader, desc="Processing Evaluation")
+
+        for inputs, ground_truth, img_group_indices in eval_dataloader_with_progress:
+            inputs, ground_truth = inputs.to(device), ground_truth.to(device)
+            outputs = model(inputs)
+
+            for gt, out in zip(ground_truth, outputs):
+                loss = loss_function(outputs, ground_truth)
+                performance.append(ImagePerformance(loss.item(), gt, out, image_group_map[img_group_indices[0]]))
+    performance.sort(key=lambda x: x.metric)
+    ranks = ["1st-Best", "2nd-Best", "3rd-Best", "3rd-Worst", "2nd-Worst", "1st-Worst"]
+    top_and_bottom_images = []
+    for i, img_perf in enumerate(performance[:3] + performance[-3:]):
+        img_perf.rank = ranks[i]
+        top_and_bottom_images.append(img_perf)
+    html_file_path = 'model_run.html'
+    update_html_for_epoch(epoch + 1, top_and_bottom_images, html_file_path)
+    if epoch == 0:
+        webbrowser.open('file://' + os.path.realpath(html_file_path))
+
 
 # Training loop
 for epoch in range(num_epochs):
     model.train()
     running_loss = 0.0
 
-    dataloader_with_progress = tqdm(dataloader, desc="Processing Batches")
+    dataloader_with_progress = tqdm(train_loader, desc="Processing Batches")
 
     for i, batch in enumerate(dataloader_with_progress):
         inputs, ground_truth, img_group = batch
@@ -69,41 +108,29 @@ for epoch in range(num_epochs):
         current_loss = loss.item()
 
         dataloader_with_progress.set_description(
-            f"Epoch {epoch + 1}/{num_epochs} - Batch {i + 1}/{len(dataloader)} Processing {img_group}, Loss: {current_loss:.4f}, Avg loss so far: {running_loss / (i + 1):.4f}"
+            f"Epoch {epoch + 1}/{num_epochs} - Batch {i + 1}/{len(train_loader)} Processing {img_group}, Loss: {current_loss:.4f}, Avg loss so far: {running_loss / (i + 1):.4f}"
         )
 
     # Print average loss for the epoch
-    epoch_loss = running_loss / len(dataloader)
-    print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
+    epoch_loss = running_loss / len(train_loader)
 
     model.eval()
+    val_loss = 0.0
 
-    performance = []
+    val_dataloader_with_progress = tqdm(val_loader, desc="Processing Validation")
 
     with torch.no_grad():
-
-        eval_dataloader_with_progress = tqdm(eval_dataloader, desc="Processing Evaluation")
-
-        for inputs, ground_truth, img_group in eval_dataloader_with_progress:
+        for inputs, ground_truth, img_group in val_dataloader_with_progress:
             inputs, ground_truth = inputs.to(device), ground_truth.to(device)
             outputs = model(inputs)
 
-            for gt, out in zip(ground_truth, outputs):
-                loss = loss_function(outputs, ground_truth)
-                performance.append(ImagePerformance(loss.item(), gt, out, img_group))
+            loss = loss_function(outputs, ground_truth)
+            val_loss += loss.item()
 
-    performance.sort(key=lambda x: x.metric)
+    avg_val_loss = val_loss / len(val_loader)
 
-    ranks = ["1st-Best", "2nd-Best", "3rd-Best", "3rd-Worst", "2nd-Worst", "1st-Worst"]
+    evaluate_rows_print_images_to_report()
 
-    top_and_bottom_images = []
-    for i, img_perf in enumerate(performance[:3] + performance[-3:]):
-        img_perf.rank = ranks[i]
-        top_and_bottom_images.append(img_perf)
-
-    html_file_path = 'model_run.html'
-    update_html_for_epoch(epoch + 1, top_and_bottom_images, html_file_path)
-    if epoch == 0:
-        webbrowser.open('file://' + os.path.realpath(html_file_path))
+    print(f"\nEpoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}, Validation Loss: {avg_val_loss:.4f}")
 
 print("Training complete")

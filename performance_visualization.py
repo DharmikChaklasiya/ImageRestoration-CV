@@ -6,6 +6,8 @@ from typing import List
 from bs4 import BeautifulSoup
 from torchvision.transforms import ToPILImage
 
+from image_group import ImageGroup
+
 
 def tensor_to_base64(tensor):
     """Convert a PyTorch tensor to a Base64-encoded image."""
@@ -16,16 +18,16 @@ def tensor_to_base64(tensor):
 
 
 class ImagePerformance:
-    def __init__(self, metric, ground_truth, output, image_index):
+    def __init__(self, metric, ground_truth, output, image_group):
         self.metric = metric
         self.ground_truth = ground_truth
         self.output = output
-        self.image_index = image_index
+        self.image_group : ImageGroup  = image_group
 
         self.rank = None
 
     def get_label(self):
-        return self.rank + " "+self.image_index
+        return self.rank + " "+self.image_group.formatted_image_index
 
 
 def update_html_for_epoch(epoch: int, images_info: List[ImagePerformance], html_file_path: str):
@@ -50,7 +52,14 @@ def update_html_for_epoch(epoch: int, images_info: List[ImagePerformance], html_
     # Append images with descriptions
     for img_perf in images_info:
         description = soup.new_tag('p')
-        description.string = f'{img_perf.rank} (Loss: {img_perf.metric:.4f}, Image Index: {img_perf.image_index})'
+        description_str = f'{img_perf.rank} (Loss: {img_perf.metric:.4f}, Image Index: {img_perf.image_group.formatted_image_index})'
+        description.append(description_str)
+
+        # Create a hyperlink to the image output
+        link = soup.new_tag('a', href=img_perf.image_group.base_output_path)
+        link.string = f"{img_perf.image_group.base_output_path}"
+        description.append(link)
+
         epoch_section.append(description)
 
         # Convert tensors to Base64 and append images

@@ -58,11 +58,19 @@ class ImageGroup:
             self.invalid_reason_filenames = [] if self.invalid_reason_filenames is None else self.invalid_reason_filenames
             self.invalid_reason_filenames.append(self.filenames)
 
-    def initialize_output_only(self, base_output_path):
+    def initialize_output_only(self, base_output_path, focal_stack_indices):
         assert base_output_path is not None and isinstance(base_output_path, str)
         self.base_output_path = os.path.join(base_output_path, self.formatted_image_index)
         self.new_ground_truth_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_gt.png")
         self.new_parameter_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_params.txt")
+
+        self.valid = True
+        for focal_stack_idx in focal_stack_indices:
+            output_img_name = self.output_image_name(focal_stack_idx)
+            if not os.path.exists(output_img_name):
+                self.valid = False
+                break
+
 
     def output_image_name(self, focal_stack_img_index):
         formatted_focal_stack_img_index = str(focal_stack_img_index).zfill(2)

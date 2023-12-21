@@ -82,8 +82,3 @@ class UNet(nn.Module):
     def up(self, x):
         """ Upsampling function to align the feature maps for concatenation """
         return nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=True)
-
-
-# Instantiate the UNet model with the correct input and output channels
-model = UNet(in_channels=11, out_channels=1)
-print(model)  # Print the model architecture

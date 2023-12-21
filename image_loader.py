@@ -6,9 +6,9 @@ from PIL import Image
 
 
 class ImageTensorGroup:
-    def __init__(self, image_group, focal_stack_indices):
+    def __init__(self, image_group: ImageGroup, focal_stack_indices):
         self.ground_truth_tensor = None
-        self.image_tensors = None
+        self.image_tensors = []
         self.image_group = image_group
         self.focal_stack_indices = focal_stack_indices  # Indices of the images in the focal stack to load
         self.transform = transforms.Compose([
@@ -17,15 +17,30 @@ class ImageTensorGroup:
         ])
 
     def load_images(self):
+        self.image_tensors = []
         for index in self.focal_stack_indices:
             image_path = self.image_group.output_image_name(index)
-            image = Image.open(image_path)
+            image = Image.open(image_path).convert('L')
             self.image_tensors.append(self.transform(image))
 
-        self.ground_truth_tensor = self.transform(Image.open(self.image_group.original_ground_truth_file))
+        try:
+            opened_image = Image.open(self.image_group.new_ground_truth_file).convert('L')
+        except Exception as e:
+            raise ValueError(f"Error while loading image from: {self.image_group.new_ground_truth_file}") from e
+        self.ground_truth_tensor = self.transform(opened_image)
 
     def get_images(self):
-        return torch.stack(self.image_tensors), self.ground_truth_tensor
+        stacked_images = torch.cat(self.image_tensors, dim=0)  # Shape: (3, 512, 512)
+        assert stacked_images.shape[0] == 3, ("Issue while processing image_group : {} - dimension 1 should be 3, "
+                                              "but is {}").format(self.image_group.formatted_image_index,
+                                                                  stacked_images.shape[0])
+        assert stacked_images.shape[1] == 512, ("Issue while processing image_group : {} - dimension 2 should be 512, "
+                                                "but is {}").format(self.image_group.formatted_image_index,
+                                                                    stacked_images.shape[1])
+        assert stacked_images.shape[2] == 512, ("Issue while processing image_group : {} - dimension 3 should be 512, "
+                                                "but is {}").format(self.image_group.formatted_image_index,
+                                                                    stacked_images.shape[2])
+        return stacked_images, self.ground_truth_tensor, self.image_group.formatted_image_index
 
 
 class CustomDataset(torch.utils.data.Dataset):
@@ -35,7 +50,8 @@ class CustomDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         img_tensor_group = self.image_tensor_groups[index]
         img_tensor_group.load_images()
-        return img_tensor_group.get_images()
+        images = img_tensor_group.get_images()
+        return images
 
     def __len__(self):
         return len(self.image_tensor_groups)
@@ -49,6 +65,8 @@ print(f"Will load data from rootdir: {root_dir}")
 # Create a list to store the image file paths
 all_image_groups = []
 
+focal_stack_indices = [0, 15, 30]
+
 # Iterate over the subfolders
 for root, dirs, files in os.walk(root_dir):
     for dir_name in dirs:
@@ -57,11 +75,16 @@ for root, dirs, files in os.walk(root_dir):
 
             for formatted_image_index in os.listdir(subfolder_path):
                 img_group = ImageGroup(int(formatted_image_index))
-                img_group.initialize_output_only(os.path.join(subfolder_path, formatted_image_index))
-                all_image_groups.append(img_group)
+                img_group.initialize_output_only(subfolder_path, focal_stack_indices)
+                if img_group.valid:
+                    all_image_groups.append(img_group)
+
+all_image_groups = sorted(all_image_groups, key=lambda img_group: int(img_group.formatted_image_index))
+
+dataset = CustomDataset(all_image_groups, focal_stack_indices)
+
+print(f"Successfully loaded image-batches - len : {len(dataset)}")
 
 
-dataset = CustomDataset(all_image_groups, [0, 15, 30])
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=4, shuffle=True)
-
-print(f"Successfully loaded images - len : {len(dataloader)}")
+def get_dataset():
+    return dataset

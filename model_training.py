@@ -10,10 +10,14 @@ from torch.utils.data import Subset
 from tqdm import tqdm
 
 from image_loader import get_dataset, get_image_group_map
-from performance_visualization import update_html_for_epoch, ImagePerformance
+from performance_visualization import update_report_samples_for_epoch, ImagePerformance, update_report_with_losses, LossHistory
 from unet_architecture import UNet
 
 from torch.utils.data import DataLoader, random_split
+
+import matplotlib.pyplot as plt
+from io import BytesIO
+import base64
 
 print(f"Using pytorch version: {torch.__version__}")
 print(f"Using pytorch cuda version: {torch.version.cuda}")
@@ -55,6 +59,8 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)  # learning rate
 # Number of training epochs
 num_epochs = 1000
 
+html_file_path = 'model_run.html'
+
 
 def evaluate_rows_print_images_to_report():
     global inputs, ground_truth, outputs, loss, i
@@ -77,11 +83,12 @@ def evaluate_rows_print_images_to_report():
     for i, img_perf in enumerate(performance[:3] + performance[-3:]):
         img_perf.rank = ranks[i]
         top_and_bottom_images.append(img_perf)
-    html_file_path = 'model_run.html'
-    update_html_for_epoch(epoch + 1, top_and_bottom_images, html_file_path)
+    update_report_samples_for_epoch(epoch + 1, top_and_bottom_images, html_file_path)
     if epoch == 0:
         webbrowser.open('file://' + os.path.realpath(html_file_path))
 
+
+loss_history = LossHistory()
 
 # Training loop
 for epoch in range(num_epochs):
@@ -89,6 +96,8 @@ for epoch in range(num_epochs):
     running_loss = 0.0
 
     dataloader_with_progress = tqdm(train_loader, desc="Processing Batches")
+
+    current_avg_loss = 0.0
 
     for i, batch in enumerate(dataloader_with_progress):
         inputs, ground_truth, img_group = batch
@@ -111,6 +120,11 @@ for epoch in range(num_epochs):
             f"Epoch {epoch + 1}/{num_epochs} - Batch {i + 1}/{len(train_loader)} Processing {img_group}, Loss: {current_loss:.4f}, Avg loss so far: {running_loss / (i + 1):.4f}"
         )
 
+        if i % 5 == 0 or i == len(train_loader) - 1:
+            current_avg_loss = running_loss / (i + 1)
+            loss_history.current_avg_train_loss = current_avg_loss
+            update_report_with_losses(epoch + 1, loss_history, html_file_path)
+
     # Print average loss for the epoch
     epoch_loss = running_loss / len(train_loader)
 
@@ -120,16 +134,26 @@ for epoch in range(num_epochs):
     val_dataloader_with_progress = tqdm(val_loader, desc="Processing Validation")
 
     with torch.no_grad():
-        for inputs, ground_truth, img_group in val_dataloader_with_progress:
+        for i, batch in enumerate(val_dataloader_with_progress):
+            inputs, ground_truth, img_group = batch
+
             inputs, ground_truth = inputs.to(device), ground_truth.to(device)
+
             outputs = model(inputs)
 
             loss = loss_function(outputs, ground_truth)
             val_loss += loss.item()
 
+            if i % 5 == 0 or i == len(train_loader) - 1:
+                current_avg_val_loss = val_loss / (i + 1)
+                loss_history.current_avg_val_loss = current_avg_val_loss
+                update_report_with_losses(epoch + 1, loss_history, html_file_path)
+
     avg_val_loss = val_loss / len(val_loader)
 
     evaluate_rows_print_images_to_report()
+
+    loss_history.add_loss(epoch_loss, avg_val_loss)
 
     print(f"\nEpoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}, Validation Loss: {avg_val_loss:.4f}")
 

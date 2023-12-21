@@ -1,0 +1,10 @@
+name: compvis-model
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - cudatoolkit=11.8.0
+  - numpy=1.26.2
+  - python=3.11.5
+  - pytorch=2.1.0
+  - torchvision=0.15.2

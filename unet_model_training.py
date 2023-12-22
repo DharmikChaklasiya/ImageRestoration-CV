@@ -9,7 +9,8 @@ from torch.nn import functional as F
 from torch.utils.data import Subset
 from tqdm import tqdm
 
-from image_loader import get_dataset, get_image_group_map
+from base_model_training import Phase
+from image_loader import get_sorted_image_groups, get_image_group_map, ImageTensorGroup, GroundTruthLabelDataset
 from performance_visualization import update_report_samples_for_epoch, ImagePerformance, update_report_with_losses, \
     LossHistory
 from unet_architecture import UNet
@@ -37,12 +38,25 @@ else:
     device = torch.device("cpu")
     print("Using CPU")
 
+focal_stack_indices = [0, 15, 30]
+
+sorted_image_groups = get_sorted_image_groups()
+
+sorted_image_tensor_groups = []
+
+for img_group in tqdm(sorted_image_groups, desc="Preloading images..."):
+    image_tensor_group = ImageTensorGroup(img_group, focal_stack_indices)
+    image_tensor_group.load_images()
+    sorted_image_tensor_groups.append(image_tensor_group)
+
+ground_truth_label_dataset = GroundTruthLabelDataset(sorted_image_tensor_groups)
+
 # Define the ratio or number of items for the split
-train_size = int(0.8 * len(get_dataset()))  # 80% for training
-val_size = len(get_dataset()) - train_size  # 20% for validation
+train_size = int(0.8 * len(ground_truth_label_dataset))  # 80% for training
+val_size = len(ground_truth_label_dataset) - train_size  # 20% for validation
 
 # Split the dataset
-train_dataset, val_dataset = random_split(get_dataset(), [train_size, val_size])
+train_dataset, val_dataset = random_split(ground_truth_label_dataset, [train_size, val_size])
 
 # Create DataLoaders for each set
 train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
@@ -51,16 +65,14 @@ val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False)
 image_group_map = get_image_group_map()
 
 num_samples_for_eval = 100
-all_indices = list(range(len(get_dataset())))
+all_indices = list(range(len(ground_truth_label_dataset)))
 random.shuffle(all_indices)
 selected_indices = all_indices[:num_samples_for_eval]
-eval_subset = Subset(get_dataset(), selected_indices)
+eval_subset = Subset(ground_truth_label_dataset, selected_indices)
 eval_dataloader = torch.utils.data.DataLoader(eval_subset, batch_size=1, shuffle=False)
 
 model = UNet(in_channels=3).to(device)
 
-# Assuming you have already defined 'model', 'dataloader', and 'dataset'
-# Define your loss function and optimizer
 loss_function = F.l1_loss  # ssim_based_loss  # F.mse_loss
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -101,11 +113,8 @@ loss_history = LossHistory()
 # Training loop
 for epoch in range(num_epochs):
     model.train()
-    running_loss = 0.0
 
     dataloader_with_progress = tqdm(train_loader, desc="Processing Batches")
-
-    current_avg_loss = 0.0
 
     for i, batch in enumerate(dataloader_with_progress):
         inputs, ground_truth, img_group = batch
@@ -121,23 +130,20 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
-        running_loss += loss.item()
-        current_loss = loss.item()
+        loss_history.add_current_running_loss(i, loss.item(), Phase.TRAINING)
 
         dataloader_with_progress.set_description(
-            f"Epoch {epoch + 1}/{num_epochs} - Batch {i + 1}/{len(train_loader)} Processing {img_group}, Loss: {current_loss:.4f}, Avg loss so far: {running_loss / (i + 1):.4f}"
+            f"Epoch {epoch + 1}/{num_epochs} - Batch {i + 1}/{len(train_loader)} Processing {img_group}, "
+            f"Loss: {loss.item():.4f}, Avg loss so far: {loss_history.current_avg_train_loss:.4f}"
         )
 
-        if i % 5 == 0 or i == len(train_loader) - 1:
-            current_avg_loss = running_loss / (i + 1)
-            loss_history.current_avg_train_loss = current_avg_loss
+        if i % 20 == 0 or i == len(train_loader) - 1:
             update_report_with_losses(epoch + 1, loss_history, html_file_path)
 
     # Print average loss for the epoch
-    epoch_loss = running_loss / len(train_loader)
+    epoch_loss = loss_history.running_loss / len(train_loader)
 
     model.eval()
-    val_loss = 0.0
 
     val_dataloader_with_progress = tqdm(val_loader, desc="Processing Validation")
 
@@ -150,14 +156,12 @@ for epoch in range(num_epochs):
             outputs = model(inputs)
 
             loss = loss_function(outputs, ground_truth)
-            val_loss += loss.item()
+            loss_history.add_current_running_loss(i, loss.item(), Phase.VALIDATION)
 
-            if i % 5 == 0 or i == len(train_loader) - 1:
-                current_avg_val_loss = val_loss / (i + 1)
-                loss_history.current_avg_val_loss = current_avg_val_loss
+            if i % 20 == 0 or i == len(val_loader) - 1:
                 update_report_with_losses(epoch + 1, loss_history, html_file_path)
 
-    avg_val_loss = val_loss / len(val_loader)
+    avg_val_loss = loss_history.running_loss / len(val_loader)
 
     evaluate_rows_print_images_to_report()
 

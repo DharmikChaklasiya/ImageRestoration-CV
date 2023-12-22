@@ -9,10 +9,12 @@ from matplotlib import pyplot as plt
 from torchvision.transforms import ToPILImage
 
 from LFR.python.image_group import ImageGroup
+from base_model_training import Phase
 
 
 class LossHistory:
     def __init__(self):
+        self.running_loss = 0.0
         self.current_avg_val_loss = None
         self.current_avg_train_loss = None
         self.training_losses = []
@@ -21,6 +23,9 @@ class LossHistory:
     def add_loss(self, training_loss, validation_loss):
         self.training_losses.append(training_loss)
         self.validation_losses.append(validation_loss)
+        self.running_loss = 0.0
+        self.current_avg_val_loss = None
+        self.current_avg_train_loss = None
 
     def get_loss_plot_base64(self):
         plt.figure()
@@ -28,14 +33,16 @@ class LossHistory:
         plt.plot(epochs, self.training_losses, label='Training Loss')
         plt.plot(epochs, self.validation_losses, label='Validation Loss')
 
-        current_epoch = len(epochs)+1
+        current_epoch = len(epochs) + 1
 
         # Plot current average losses if available
         if self.current_avg_train_loss is not None:
-            plt.scatter(current_epoch, self.current_avg_train_loss, color='blue', marker='x', label='Current Avg Training Loss')
+            plt.scatter(current_epoch, self.current_avg_train_loss, color='blue', marker='x',
+                        label='Current Avg Training Loss')
 
         if self.current_avg_val_loss is not None:
-            plt.scatter(current_epoch, self.current_avg_val_loss, color='orange', marker='x', label='Current Avg Validation Loss')
+            plt.scatter(current_epoch, self.current_avg_val_loss, color='orange', marker='x',
+                        label='Current Avg Validation Loss')
 
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
@@ -63,6 +70,20 @@ class LossHistory:
 
         return base64.b64encode(image_png).decode('utf-8')
 
+    def add_current_running_loss(self, batch_num, running_loss, phase):
+        if phase == Phase.TRAINING:
+            if batch_num == 0:
+                self.running_loss = 0.0
+            self.running_loss += running_loss
+            self.current_avg_train_loss = self.running_loss / (batch_num + 1)
+        elif phase == Phase.VALIDATION:
+            if batch_num == 0:
+                self.running_loss = 0.0
+            self.running_loss += running_loss
+            self.current_avg_val_loss = self.running_loss / (batch_num + 1)
+        else:
+            raise ValueError("Unknown phase : "+phase)
+
 
 def tensor_to_base64(tensor):
     """Convert a PyTorch tensor to a Base64-encoded image."""
@@ -86,7 +107,7 @@ class ImagePerformance:
 
 
 def update_report_with_losses(epoch, loss_history: LossHistory, html_file_path):
-    soup = createOrGetHtmlFile(html_file_path)
+    soup = create_or_get_html_file(html_file_path)
 
     # Find or create the loss info section
     loss_info_section = soup.find('div', id='loss-info')
@@ -118,7 +139,7 @@ def update_report_with_losses(epoch, loss_history: LossHistory, html_file_path):
     write_update_file(html_file_path, soup)
 
 
-def createOrGetHtmlFile(html_file_path):
+def create_or_get_html_file(html_file_path):
     # Open the existing HTML file or create a new structure if it doesn't exist
     if os.path.exists(html_file_path):
         with open(html_file_path, 'r') as file:
@@ -143,7 +164,7 @@ def createOrGetHtmlFile(html_file_path):
 
 
 def update_report_samples_for_epoch(epoch: int, images_info: List[ImagePerformance], html_file_path: str):
-    soup = createOrGetHtmlFile(html_file_path)
+    soup = create_or_get_html_file(html_file_path)
 
     # Find the body tag or create it if not exist
     samples_info_section = soup.find('div', id='samples-info')

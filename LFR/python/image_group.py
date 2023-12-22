@@ -7,6 +7,7 @@ class ImageGroup:
     def calc_full_image_index(image_prefix, image_index):
         assert image_prefix is not None
         assert image_index is not None
+        assert int(image_prefix) < 10 and int(image_prefix) >= 0, "Image prefix {} must be a single digit".format(image_prefix)
         prefix_num = int(image_prefix)*ImageGroup.prefix_digit
         image_index_num = int(image_index)
         assert image_index_num < ImageGroup.prefix_digit, "Image index {} must be less than {} or our algorithm of combining indices won't work".format(image_index_num, ImageGroup.prefix_digit)
@@ -22,7 +23,7 @@ class ImageGroup:
             self.image_index_without_prefix = self.image_index - prefix
         else:
             self.image_index_without_prefix = self.image_index
-        self.formatted_image_index = str(image_index).zfill(6)
+        self.formatted_image_index = str(image_index).zfill(len(self.prefix_digit))
         self.filenames = []
         self.base_output_path = None
         self.original_ground_truth_file = None

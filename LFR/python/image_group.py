@@ -4,13 +4,16 @@ import os
 class ImageGroup:
     prefix_digit = 100000
 
+    @staticmethod
     def calc_full_image_index(image_prefix, image_index):
         assert image_prefix is not None
         assert image_index is not None
-        assert int(image_prefix) < 10 and int(image_prefix) >= 0, "Image prefix {} must be a single digit".format(image_prefix)
+        assert 10 > int(image_prefix) >= 0, "Image prefix {} must be a single digit".format(image_prefix)
         prefix_num = int(image_prefix)*ImageGroup.prefix_digit
         image_index_num = int(image_index)
-        assert image_index_num < ImageGroup.prefix_digit, "Image index {} must be less than {} or our algorithm of combining indices won't work".format(image_index_num, ImageGroup.prefix_digit)
+        assert image_index_num < ImageGroup.prefix_digit, (("Image index {} must be less than {} or our algorithm of "
+                                                           "combining indices won't work")
+                                                           .format(image_index_num, ImageGroup.prefix_digit))
         return prefix_num+image_index_num
 
     def __init__(self, image_index):
@@ -18,12 +21,12 @@ class ImageGroup:
         assert isinstance(image_index, int)
         assert image_index >= 0
         self.image_index = image_index
-        if(self.image_index >= self.prefix_digit):
+        if self.image_index >= self.prefix_digit:
             prefix = (self.image_index // self.prefix_digit) * self.prefix_digit
             self.image_index_without_prefix = self.image_index - prefix
         else:
             self.image_index_without_prefix = self.image_index
-        self.formatted_image_index = str(image_index).zfill(len(self.prefix_digit))
+        self.formatted_image_index = str(image_index).zfill(len(str(self.prefix_digit)))
         self.filenames = []
         self.base_output_path = None
         self.original_ground_truth_file = None
@@ -77,3 +80,16 @@ class ImageGroup:
     def output_image_name(self, focal_stack_img_index):
         formatted_focal_stack_img_index = str(focal_stack_img_index).zfill(2)
         return os.path.join(self.base_output_path, f"{self.formatted_image_index}_{formatted_focal_stack_img_index}.png")
+
+    def initialize_output_only(self, base_output_path, focal_stack_indices):
+        assert base_output_path is not None and isinstance(base_output_path, str)
+        self.base_output_path = os.path.join(base_output_path, self.formatted_image_index)
+        self.new_ground_truth_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_gt.png")
+        self.new_parameter_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_params.txt")
+
+        self.valid = True
+        for focal_stack_idx in focal_stack_indices:
+            output_img_name = self.output_image_name(focal_stack_idx)
+            if not os.path.exists(output_img_name):
+                self.valid = False
+                break

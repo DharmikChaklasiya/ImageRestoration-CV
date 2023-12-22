@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from matplotlib import pyplot as plt
 from torchvision.transforms import ToPILImage
 
-from image_group import ImageGroup
+from LFR.python.image_group import ImageGroup
 
 
 class LossHistory:

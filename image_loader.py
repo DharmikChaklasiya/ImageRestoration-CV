@@ -1,8 +1,9 @@
 import os
 import torch
 from torchvision import datasets, transforms
-from image_group import ImageGroup
 from PIL import Image
+
+from LFR.python.image_group import ImageGroup
 
 
 class ImageTensorGroup:

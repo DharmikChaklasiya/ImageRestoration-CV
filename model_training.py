@@ -10,14 +10,22 @@ from torch.utils.data import Subset
 from tqdm import tqdm
 
 from image_loader import get_dataset, get_image_group_map
-from performance_visualization import update_report_samples_for_epoch, ImagePerformance, update_report_with_losses, LossHistory
+from performance_visualization import update_report_samples_for_epoch, ImagePerformance, update_report_with_losses, \
+    LossHistory
 from unet_architecture import UNet
 
 from torch.utils.data import DataLoader, random_split
 
-import matplotlib.pyplot as plt
-from io import BytesIO
-import base64
+from pytorch_msssim import SSIM
+
+ssim_loss = SSIM(data_range=1.0, size_average=True, channel=3)
+
+
+def ssim_based_loss(output, target):
+    # Calculate SSIM loss
+    loss = 1 - ssim_loss(output, target)  # 1 - SSIM since we want to minimize the loss
+    return loss
+
 
 print(f"Using pytorch version: {torch.__version__}")
 print(f"Using pytorch cuda version: {torch.version.cuda}")
@@ -53,8 +61,8 @@ model = UNet(in_channels=3).to(device)
 
 # Assuming you have already defined 'model', 'dataloader', and 'dataset'
 # Define your loss function and optimizer
-loss_function = F.mse_loss  # or any other appropriate loss function
-optimizer = optim.Adam(model.parameters(), lr=0.001)  # learning rate
+loss_function = F.l1_loss  # ssim_based_loss  # F.mse_loss
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Number of training epochs
 num_epochs = 1000

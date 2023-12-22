@@ -2,6 +2,7 @@ name: compvis-model
 channels:
   - pytorch
   - defaults
+  - conda-forge
 dependencies:
   - cudatoolkit=11.8.0
   - numpy=1.26.2
@@ -11,3 +12,4 @@ dependencies:
   - tqdm
   - bs4
   - matplotlib
+  - pytorch-msssim

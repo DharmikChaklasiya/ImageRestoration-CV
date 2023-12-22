@@ -7,6 +7,11 @@ class ImageGroup:
         assert isinstance(image_index, int)
         assert image_index >= 0
         self.image_index = image_index
+        if self.image_index >= 10000:
+            prefix = (self.image_index // 10000) * 10000
+            self.image_index_without_prefix = self.image_index - prefix
+        else:
+            self.image_index_without_prefix = self.image_index
         self.formatted_image_index = str(image_index).zfill(6)
         self.filenames = []
         self.base_output_path = None
@@ -25,9 +30,11 @@ class ImageGroup:
         leading_digit = os.path.basename(full_filename).split('_')[0]
         base_path = os.path.dirname(full_filename)
         self.base_output_path = os.path.join(base_output_path, self.formatted_image_index)
-        self.original_ground_truth_file = os.path.join(base_path, f"{leading_digit}_{self.image_index}_GT_pose_0_thermal.png")
+        self.original_ground_truth_file = os.path.join(base_path,
+                                                       f"{leading_digit}_{self.image_index_without_prefix}_GT_pose_0_thermal.png")
         self.new_ground_truth_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_gt.png")
-        self.original_parameter_file = os.path.join(base_path, f"{leading_digit}_{self.image_index}_Parameters.txt")
+        self.original_parameter_file = os.path.join(base_path,
+                                                    f"{leading_digit}_{self.image_index_without_prefix}_Parameters.txt")
         self.new_parameter_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_params.txt")
 
     def initialize_and_validate(self, base_output_path):
@@ -36,27 +43,32 @@ class ImageGroup:
         if not os.path.exists(self.original_ground_truth_file):
             self.valid = False
             self.invalid_reason = "" if self.invalid_reason is None else self.invalid_reason
-            self.invalid_reason += f"Could not find ground truth file"
+            self.invalid_reason += f"Could not find ground truth file. "
             self.invalid_reason_filenames = [] if self.invalid_reason_filenames is None else self.invalid_reason_filenames
             self.invalid_reason_filenames.append(self.original_ground_truth_file)
         if not os.path.exists(self.original_parameter_file):
             self.valid = False
             self.invalid_reason = "" if self.invalid_reason is None else self.invalid_reason
-            self.invalid_reason += f"Could not find parameter file"
+            self.invalid_reason += f"Could not find parameter file. "
             self.invalid_reason_filenames = [] if self.invalid_reason_filenames is None else self.invalid_reason_filenames
             self.invalid_reason_filenames.append(self.original_parameter_file)
         if len(self.filenames) < 11:
             self.valid = False
             self.invalid_reason = "" if self.invalid_reason is None else self.invalid_reason
-            self.invalid_reason += f"Expected 11 images but got less"
+            self.invalid_reason += f"Expected 11 images but got less. "
             self.invalid_reason_filenames = [] if self.invalid_reason_filenames is None else self.invalid_reason_filenames
             self.invalid_reason_filenames.append(self.filenames)
         if len(self.filenames) > 11:
             self.valid = False
             self.invalid_reason = "" if self.invalid_reason is None else self.invalid_reason
-            self.invalid_reason += f"Expected 11 images but got more"
+            self.invalid_reason += f"Expected 11 images but got more. "
             self.invalid_reason_filenames = [] if self.invalid_reason_filenames is None else self.invalid_reason_filenames
             self.invalid_reason_filenames.append(self.filenames)
+
+    def output_image_name(self, focal_stack_img_index):
+        formatted_focal_stack_img_index = str(focal_stack_img_index).zfill(2)
+        return os.path.join(self.base_output_path,
+                            f"{self.formatted_image_index}_{formatted_focal_stack_img_index}.png")
 
     def initialize_output_only(self, base_output_path, focal_stack_indices):
         assert base_output_path is not None and isinstance(base_output_path, str)
@@ -70,8 +82,3 @@ class ImageGroup:
             if not os.path.exists(output_img_name):
                 self.valid = False
                 break
-
-
-    def output_image_name(self, focal_stack_img_index):
-        formatted_focal_stack_img_index = str(focal_stack_img_index).zfill(2)
-        return os.path.join(self.base_output_path, f"{self.formatted_image_index}_{formatted_focal_stack_img_index}.png")

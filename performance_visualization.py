@@ -1,6 +1,6 @@
 import base64
 import os
-from io import BytesIO
+from io import BytesIO, StringIO
 from typing import List
 
 import numpy as np
@@ -182,6 +182,12 @@ def update_report_samples_for_epoch(epoch: int, images_info: List[ImagePerforman
 
 
 def write_update_file(html_file_path, soup):
-    # Write the updated content back to the HTML file
-    with open(html_file_path, 'w') as file:
-        file.write(str(soup))
+    # Prepare the entire content in a buffer
+    buffer = StringIO()
+    buffer.write(str(soup))
+    buffer_content = buffer.getvalue()
+    buffer.close()
+
+    # Overwrite the file with the new content in one go
+    with open(html_file_path, 'w', encoding='utf-8') as file:
+        file.write(buffer_content)

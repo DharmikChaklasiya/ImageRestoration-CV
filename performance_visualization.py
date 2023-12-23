@@ -206,17 +206,26 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
         epoch_section.append(description)
 
         if img_perf.label_and_prediction.is_coordinate_prediction():
+
+            if len(img_perf.image_group.output_file_names) <= 2:
+                raise ValueError("We should have filenames, but haven't for : "+img_perf.image_group.base_output_path)
+
+            median_image_filename = img_perf.image_group.output_file_names[len(img_perf.image_group.output_file_names) // 2]
+
             updated_img = add_horizontal_line(img_perf.ground_truth, img_perf.label_and_prediction.label[0])
             updated_img = add_horizontal_line(updated_img, img_perf.label_and_prediction.prediction[0])
             updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.label[1])
             updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.prediction[1])
             gt_base64 = tensor_to_base64(updated_img)
             img_gt = soup.new_tag('img', src=f"data:image/png;base64,{gt_base64}", width="300")
+            median_image_tag = soup.new_tag('img', src=median_image_filename, width="300")
             epoch_section.append(img_gt)
+            epoch_section.append(median_image_tag)
 
             label_pred_desc = soup.new_tag('p')
             label_pred_desc.string = (f'Label (x,y) : ({img_perf.label_and_prediction.label[0]}, {img_perf.label_and_prediction.label[1]}) '
-                                      f'Prediction (x,y) : ({img_perf.label_and_prediction.prediction[0]}, {img_perf.label_and_prediction.prediction[1]})')
+                                      f'Prediction (x,y) : ({img_perf.label_and_prediction.prediction[0]}, {img_perf.label_and_prediction.prediction[1]})'
+                                      )
             epoch_section.append(label_pred_desc)
         else:
             # Convert tensors to Base64 and append images

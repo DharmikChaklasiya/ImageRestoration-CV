@@ -36,6 +36,7 @@ class ImageGroup:
         self.valid = True
         self.invalid_reason = None
         self.invalid_reason_filenames = None
+        self.output_file_names = []
 
     def add_filename(self, full_filename):
         self.filenames.append(full_filename)
@@ -90,6 +91,7 @@ class ImageGroup:
         self.valid = True
         for focal_stack_idx in focal_stack_indices:
             output_img_name = self.output_image_name(focal_stack_idx)
+            self.output_file_names.append(output_img_name)
             if not os.path.exists(output_img_name):
                 self.valid = False
                 break

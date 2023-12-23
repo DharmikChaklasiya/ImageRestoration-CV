@@ -225,11 +225,6 @@ def update_report_samples_for_epoch(epoch: int, images_info: List[ImagePerforman
 
     max_sections = 5
 
-    print("samples_info_section currently has:"+str(len(samples_info_section.contents)))
-
-    if len(samples_info_section.contents) > max_sections:
-        print("We should remove now....")
-
     while len(samples_info_section.contents) > max_sections:
         oldest_section = samples_info_section.contents[-1]
         oldest_section.decompose()

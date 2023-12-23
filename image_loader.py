@@ -18,7 +18,6 @@ class ImageTensorGroup:
         self.focal_stack_indices = focal_stack_indices  # Indices of the images in the focal stack to load
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            # Add any additional transformations here
         ])
         self.shape_mapping = {'laying': [1, 0, 0, 0, 0], 'sitting': [0, 1, 0, 0, 0], 'standing': [0, 0, 1, 0, 0],
                               'idle': [0, 0, 0, 1, 0], 'no person': [0, 0, 0, 0, 1]}

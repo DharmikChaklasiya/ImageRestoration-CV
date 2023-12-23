@@ -1,6 +1,9 @@
 # Import necessary libraries
+import os
 import random
+import webbrowser
 from math import inf
+from typing import Dict
 
 import torch
 from torch import optim
@@ -10,7 +13,8 @@ from tqdm import tqdm
 
 from base_model_training import Phase
 from image_loader import get_image_group_map, get_sorted_image_groups, ImageTensorGroup, PosePredictionLabelDataset
-from performance_visualization import LossHistory, update_report_with_losses
+from performance_visualization import LossHistory, update_report_with_losses, ImagePerformance, LabelAndPrediction, \
+    update_report_samples_for_epoch
 from poseprediction_architecture import PosePredictionModel, FCConfig
 from unet_encoder import UNetEncoder
 
@@ -28,11 +32,14 @@ sorted_image_groups = get_sorted_image_groups()
 
 sorted_image_tensor_groups = []
 
+image_tensor_group_map: Dict[str, ImageTensorGroup] = {}
+
 focal_stack_indices = [0, 15, 30]
 
 for img_group in tqdm(sorted_image_groups, desc="Preloading images..."):
     image_tensor_group = ImageTensorGroup(img_group, focal_stack_indices)
     image_tensor_group.load_images()
+    image_tensor_group_map[img_group.formatted_image_index] = image_tensor_group
     sorted_image_tensor_groups.append(image_tensor_group)
 
 pose_prediction_label_dataset = PosePredictionLabelDataset(sorted_image_tensor_groups)
@@ -67,7 +74,7 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
 # Number of training epochs
 num_epochs = 1000
 
-html_file_path = 'model_run.html'
+html_file_path = 'model_run_pose_pred.html'
 
 loss_history = LossHistory()
 
@@ -96,6 +103,37 @@ def normalize_x_and_y_labels():
 
 
 # normalize_x_and_y_labels()
+
+def evaluate_rows_print_images_to_report():
+    global inputs, pose_prediction_labels, outputs, loss_history, i
+    model.eval()
+    performance = []
+    with torch.no_grad():
+
+        eval_dataloader_with_progress = tqdm(eval_dataloader, desc="Processing Evaluation")
+
+        for inputs, pose_prediction_labels, img_group_indices in eval_dataloader_with_progress:
+            inputs, pose_prediction_labels = inputs.to(device), pose_prediction_labels.to(device)
+            outputs = model(inputs)
+
+            for pose_pred_label, out in zip(pose_prediction_labels, outputs):
+                loss = loss_function(out, pose_pred_label)
+                first_img_group_index = img_group_indices[0]
+                gt = image_tensor_group_map[first_img_group_index].ground_truth_tensor
+                performance.append(
+                    ImagePerformance(loss.item(), gt,
+                                     LabelAndPrediction(pose_pred_label, out), image_group_map[first_img_group_index]))
+
+    performance.sort(key=lambda x: x.metric)
+    ranks = ["1st-Best", "2nd-Best", "3rd-Best", "3rd-Worst", "2nd-Worst", "1st-Worst"]
+    top_and_bottom_images = []
+    for i, img_perf in enumerate(performance[:3] + performance[-3:]):
+        img_perf.rank = ranks[i]
+        top_and_bottom_images.append(img_perf)
+    update_report_samples_for_epoch(epoch + 1, top_and_bottom_images, html_file_path)
+    if epoch == 0:
+        webbrowser.open('file://' + os.path.realpath(html_file_path))
+
 
 # Training loop
 for epoch in range(num_epochs):
@@ -161,6 +199,8 @@ for epoch in range(num_epochs):
     loss_history.add_loss(epoch_loss, avg_val_loss)
 
     scheduler.step()
+
+    evaluate_rows_print_images_to_report()
 
     print(f"\nEpoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}, Validation Loss: {avg_val_loss:.4f}")
 

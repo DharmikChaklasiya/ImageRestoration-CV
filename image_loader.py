@@ -66,7 +66,7 @@ class ImageTensorGroup:
                 match = re.search(r'person pose \(x,y,z,rot x, rot y, rot z\) =\s*([-\d.]+)\s+([-\d.]+)', line)
 
                 if match:
-                    x, y = float(match.group(1)) / x_max_value, float(match.group(2)) / y_max_value
+                    x, y = float(match.group(1)) / x_max_value * 0.7, float(match.group(2)) / y_max_value * 0.7 #the picture coordinates do not fill the whole space, whyever that is the case!
                 elif "no person" in line:
                     x, y = 0.0, 0.0
                     shape_encoded = self.shape_mapping.get("no person", None)

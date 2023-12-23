@@ -12,7 +12,7 @@ from tqdm import tqdm
 from base_model_training import Phase
 from image_loader import get_sorted_image_groups, get_image_group_map, ImageTensorGroup, GroundTruthLabelDataset
 from performance_visualization import update_report_samples_for_epoch, ImagePerformance, update_report_with_losses, \
-    LossHistory
+    LossHistory, LabelAndPrediction
 from unet_architecture import UNet
 
 from torch.utils.data import DataLoader, random_split
@@ -79,7 +79,7 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 # Number of training epochs
 num_epochs = 1000
 
-html_file_path = 'model_run.html'
+html_file_path = 'model_run_unet.html'
 
 
 def evaluate_rows_print_images_to_report():
@@ -96,9 +96,9 @@ def evaluate_rows_print_images_to_report():
 
             for gt, out in zip(ground_truth, outputs):
                 loss = loss_function(outputs, ground_truth)
-                performance.append(ImagePerformance(loss.item(), gt, out, image_group_map[img_group_indices[0]]))
+                performance.append(ImagePerformance(loss.item(), gt, LabelAndPrediction(gt, out), image_group_map[img_group_indices[0]]))
     performance.sort(key=lambda x: x.metric)
-    ranks = ["1st-Best", "2nd-Best", "3rd-Best", "3rd-Worst", "2nd-Worst", "1st-Worst"]
+    ranks = ["Best", "2nd-Best", "3rd-Best", "3rd-Worst", "2nd-Worst", "Worst"]
     top_and_bottom_images = []
     for i, img_perf in enumerate(performance[:3] + performance[-3:]):
         img_perf.rank = ranks[i]

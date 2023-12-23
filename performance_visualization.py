@@ -4,6 +4,7 @@ from io import BytesIO, StringIO
 from typing import List
 
 import numpy as np
+import torch
 from bs4 import BeautifulSoup
 from matplotlib import pyplot as plt
 from torchvision.transforms import ToPILImage
@@ -82,7 +83,7 @@ class LossHistory:
             self.running_loss += running_loss
             self.current_avg_val_loss = self.running_loss / (batch_num + 1)
         else:
-            raise ValueError("Unknown phase : "+phase)
+            raise ValueError("Unknown phase : " + phase)
 
 
 def tensor_to_base64(tensor):
@@ -93,11 +94,21 @@ def tensor_to_base64(tensor):
     return base64.b64encode(buffered.getvalue()).decode("utf-8")  # Encode to base64
 
 
+class LabelAndPrediction:
+    def __init__(self, label: torch.Tensor, prediction: torch.Tensor):
+        self.label: torch.Tensor = label
+        self.prediction: torch.Tensor = prediction
+
+    def is_coordinate_prediction(self):
+        # Check if label_and_prediction is a 1D tensor (x prediction)
+        return isinstance(self.label, torch.Tensor) and self.label.dim() == 1
+
+
 class ImagePerformance:
-    def __init__(self, metric, ground_truth, output, image_group):
+    def __init__(self, metric, ground_truth_img: torch.Tensor, label_and_prediction: LabelAndPrediction, image_group):
         self.metric = metric
-        self.ground_truth = ground_truth
-        self.output = output
+        self.ground_truth: torch.Tensor = ground_truth_img
+        self.label_and_prediction = label_and_prediction
         self.image_group: ImageGroup = image_group
 
         self.rank = None
@@ -178,6 +189,7 @@ def update_report_samples_for_epoch(epoch: int, images_info: List[ImagePerforman
 
     # Append images with descriptions
     for img_perf in images_info:
+        assert isinstance(img_perf, ImagePerformance)
         description = soup.new_tag('p')
         description_str = f'{img_perf.rank} (Loss: {img_perf.metric:.4f}, Image Index: {img_perf.image_group.formatted_image_index}) '
         description.append(description_str)
@@ -189,17 +201,85 @@ def update_report_samples_for_epoch(epoch: int, images_info: List[ImagePerforman
 
         epoch_section.append(description)
 
-        # Convert tensors to Base64 and append images
-        gt_base64 = tensor_to_base64(img_perf.ground_truth)
-        out_base64 = tensor_to_base64(img_perf.output)
-        img_gt = soup.new_tag('img', src=f"data:image/png;base64,{gt_base64}", width="300")
-        img_out = soup.new_tag('img', src=f"data:image/png;base64,{out_base64}", width="300")
-        epoch_section.append(img_gt)
-        epoch_section.append(img_out)
+        if img_perf.label_and_prediction.is_coordinate_prediction():
+            updated_img = add_horizontal_line(img_perf.ground_truth, img_perf.label_and_prediction.label[0])
+            updated_img = add_horizontal_line(updated_img, img_perf.label_and_prediction.prediction[0])
+            gt_base64 = tensor_to_base64(updated_img)
+            img_gt = soup.new_tag('img', src=f"data:image/png;base64,{gt_base64}", width="300")
+            epoch_section.append(img_gt)
+
+            label_pred_desc = soup.new_tag('p')
+            label_pred_desc.string = (f'Label: {img_perf.label_and_prediction.label[0]}, '
+                                      f'Prediction: {img_perf.label_and_prediction.prediction[0]}')
+            epoch_section.append(label_pred_desc)
+        else:
+            # Convert tensors to Base64 and append images
+            gt_base64 = tensor_to_base64(img_perf.label_and_prediction.label)
+            out_base64 = tensor_to_base64(img_perf.label_and_prediction.prediction)
+            img_gt = soup.new_tag('img', src=f"data:image/png;base64,{gt_base64}", width="300")
+            img_out = soup.new_tag('img', src=f"data:image/png;base64,{out_base64}", width="300")
+            epoch_section.append(img_gt)
+            epoch_section.append(img_out)
 
     samples_info_section.insert(0, epoch_section)
 
+    max_sections = 5
+
+    print("samples_info_section currently has:"+str(len(samples_info_section.contents)))
+
+    if len(samples_info_section.contents) > max_sections:
+        print("We should remove now....")
+
+    while len(samples_info_section.contents) > max_sections:
+        oldest_section = samples_info_section.contents[-1]
+        oldest_section.decompose()
+
     write_update_file(html_file_path, soup)
+
+
+def add_vertical_line(image_tensor_in: torch.Tensor, y_position):
+    """
+    Add a vertical line to the image tensor.
+    :param image_tensor_in: Tensor of shape [C, H, W]
+    :param y_position: X position of the line, in the range [-1.0, 1.0]
+    :return: Modified image tensor
+    """
+    image_tensor = image_tensor_in.clone()
+    C, H, W = image_tensor.shape
+    # Normalize x_position to pixel coordinates
+    pixel_y = int((1-y_position) * W / 2)
+
+    # Clamp to ensure the x coordinate is within the image width
+    pixel_y = max(0, min(W - 1, pixel_y))
+
+    # Draw the line (modifying the tensor in place)
+    # Assuming you want to draw the line in white color, and your tensor is in the range [0, 1]
+    for c in range(C):  # For each channel
+        image_tensor[c, :, pixel_y] = 1.0
+
+    return image_tensor
+
+def add_horizontal_line(image_tensor_in: torch.Tensor, x_position):
+    """
+    Add a horizontal line to the image tensor.
+    :param image_tensor_in: Tensor of shape [C, H, W]
+    :param x_position: X position of the line, in the range [-1.0, 1.0]
+    :return: Modified image tensor
+    """
+    image_tensor = image_tensor_in.clone()
+    C, H, W = image_tensor.shape
+    # Normalize x_position to pixel coordinates
+    pixel_x = int((1 - x_position) * H / 2)
+
+    # Clamp to ensure the x coordinate is within the image height
+    pixel_x = max(0, min(H - 1, pixel_x))
+
+    # Draw the line (modifying the tensor in place)
+    # Assuming you want to draw the line in white color, and your tensor is in the range [0, 1]
+    for c in range(C):  # For each channel
+        image_tensor[c, pixel_x, :] = 1.0
+
+    return image_tensor
 
 
 def write_update_file(html_file_path, soup):
@@ -216,5 +296,3 @@ def write_update_file(html_file_path, soup):
     except OSError as e:
         print(f"Error writing to file: {e}")
         print(f"File path attempted: {html_file_path}")
-
-

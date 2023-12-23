@@ -39,7 +39,7 @@ class ImageTensorGroup:
         with open(self.image_group.new_parameter_file, 'r') as file:
             shape_encoded, x, y = self.parse_param_file(self.image_group.new_parameter_file, file.readlines())
 
-        self.pose_prediction_labels = torch.tensor([x])  # torch.tensor(shape_encoded + [x, y]) we start slowly - predicting everything sadly doesn't work at all
+        self.pose_prediction_labels = torch.tensor([x, y])  # torch.tensor(shape_encoded + [x, y]) we start slowly - predicting everything sadly doesn't work at all
 
     def get_images(self):
         stacked_images = images_to_tensors(self.image_tensors, self.image_group.formatted_image_index)
@@ -66,7 +66,8 @@ class ImageTensorGroup:
                 match = re.search(r'person pose \(x,y,z,rot x, rot y, rot z\) =\s*([-\d.]+)\s+([-\d.]+)', line)
 
                 if match:
-                    x, y = float(match.group(1)) / x_max_value * 0.7, float(match.group(2)) / y_max_value * 0.7 #the picture coordinates do not fill the whole space, whyever that is the case!
+                    x, y = float(match.group(1)) / x_max_value * 0.68, float(match.group(2)) / y_max_value * 0.68
+                    # the picture coordinates do not fill the whole space, whyever that is the case!
                 elif "no person" in line:
                     x, y = 0.0, 0.0
                     shape_encoded = self.shape_mapping.get("no person", None)

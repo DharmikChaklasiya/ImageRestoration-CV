@@ -57,14 +57,14 @@ val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False)
 image_group_map = get_image_group_map()
 
 num_samples_for_eval = 100
-all_indices = list(range(len(pose_prediction_label_dataset)))
+all_indices = list(range(len(val_dataset)))
 random.shuffle(all_indices)
 selected_indices = all_indices[:num_samples_for_eval]
-eval_subset = Subset(pose_prediction_label_dataset, selected_indices)
+eval_subset = Subset(val_dataset, selected_indices)
 eval_dataloader = torch.utils.data.DataLoader(eval_subset, batch_size=1, shuffle=False)
 
 model = PosePredictionModel(encoder=UNetEncoder(in_channels=3, input_width=512, input_height=512),
-                            fcconfig=FCConfig(512, 128, 1)).to(device)
+                            fcconfig=FCConfig(512, 128, 2)).to(device)
 
 loss_function = torch.nn.MSELoss()
 
@@ -124,16 +124,7 @@ def evaluate_rows_print_images_to_report():
                     ImagePerformance(loss.item(), gt,
                                      LabelAndPrediction(pose_pred_label, out), image_group_map[first_img_group_index]))
 
-    performance.sort(key=lambda x: x.metric)
-    ranks = ["1st-Best", "2nd-Best", "3rd-Best", "3rd-Worst", "2nd-Worst", "1st-Worst"]
-    top_and_bottom_images = []
-    for i, img_perf in enumerate(performance[:3] + performance[-3:]):
-        img_perf.rank = ranks[i]
-        top_and_bottom_images.append(img_perf)
-    update_report_samples_for_epoch(epoch + 1, top_and_bottom_images, html_file_path)
-    if epoch == 0:
-        webbrowser.open('file://' + os.path.realpath(html_file_path))
-
+    update_report_samples_for_epoch(epoch + 1, performance, html_file_path)
 
 # Training loop
 for epoch in range(num_epochs):

@@ -1,5 +1,6 @@
 import base64
 import os
+import webbrowser
 from io import BytesIO, StringIO
 from typing import List
 
@@ -174,7 +175,10 @@ def create_or_get_html_file(html_file_path):
     return soup
 
 
-def update_report_samples_for_epoch(epoch: int, images_info: List[ImagePerformance], html_file_path: str):
+def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerformance], html_file_path: str):
+
+    images_info = rank_performances(performance)
+
     soup = create_or_get_html_file(html_file_path)
 
     # Find the body tag or create it if not exist
@@ -204,13 +208,15 @@ def update_report_samples_for_epoch(epoch: int, images_info: List[ImagePerforman
         if img_perf.label_and_prediction.is_coordinate_prediction():
             updated_img = add_horizontal_line(img_perf.ground_truth, img_perf.label_and_prediction.label[0])
             updated_img = add_horizontal_line(updated_img, img_perf.label_and_prediction.prediction[0])
+            updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.label[1])
+            updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.prediction[1])
             gt_base64 = tensor_to_base64(updated_img)
             img_gt = soup.new_tag('img', src=f"data:image/png;base64,{gt_base64}", width="300")
             epoch_section.append(img_gt)
 
             label_pred_desc = soup.new_tag('p')
-            label_pred_desc.string = (f'Label: {img_perf.label_and_prediction.label[0]}, '
-                                      f'Prediction: {img_perf.label_and_prediction.prediction[0]}')
+            label_pred_desc.string = (f'Label (x,y) : ({img_perf.label_and_prediction.label[0]}, {img_perf.label_and_prediction.label[1]}) '
+                                      f'Prediction (x,y) : ({img_perf.label_and_prediction.prediction[0]}, {img_perf.label_and_prediction.prediction[1]})')
             epoch_section.append(label_pred_desc)
         else:
             # Convert tensors to Base64 and append images
@@ -230,6 +236,37 @@ def update_report_samples_for_epoch(epoch: int, images_info: List[ImagePerforman
         oldest_section.decompose()
 
     write_update_file(html_file_path, soup)
+
+    if epoch == 1:
+        webbrowser.open('file://' + os.path.realpath(html_file_path))
+
+
+def rank_performances(performance):
+    ranks = ["Best", "2nd-Best", "3rd-Best", "Median-1", "Median", "Median+1", "3rd-Worst", "2nd-Worst", "Worst"]
+    performance.sort(key=lambda x: x.metric)
+    performance_length = len(performance)
+    median_index = performance_length // 2
+    images_info = []
+    # Append top 3 performances
+    for i, img_perf in enumerate(performance[:3]):
+        img_perf.rank = ranks[i]
+        images_info.append(img_perf)
+    # Handling for median performances
+    if performance_length % 2 == 0:
+        # Even number of performances (two medians)
+        median_performances = performance[median_index - 2:median_index + 1]
+    else:
+        # Odd number of performances
+        median_performances = performance[median_index - 1:median_index + 2]
+    # Append median performances
+    for i, img_perf in enumerate(median_performances):
+        img_perf.rank = ranks[3 + i]  # Offset by 3 for the "median" ranks
+        images_info.append(img_perf)
+    # Append bottom 3 performances
+    for i, img_perf in enumerate(performance[-3:]):
+        img_perf.rank = ranks[6 + i]
+        images_info.append(img_perf)
+    return images_info
 
 
 def add_vertical_line(image_tensor_in: torch.Tensor, y_position):

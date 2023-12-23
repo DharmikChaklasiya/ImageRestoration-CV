@@ -97,16 +97,8 @@ def evaluate_rows_print_images_to_report():
             for gt, out in zip(ground_truth, outputs):
                 loss = loss_function(outputs, ground_truth)
                 performance.append(ImagePerformance(loss.item(), gt, LabelAndPrediction(gt, out), image_group_map[img_group_indices[0]]))
-    performance.sort(key=lambda x: x.metric)
-    ranks = ["Best", "2nd-Best", "3rd-Best", "3rd-Worst", "2nd-Worst", "Worst"]
-    top_and_bottom_images = []
-    for i, img_perf in enumerate(performance[:3] + performance[-3:]):
-        img_perf.rank = ranks[i]
-        top_and_bottom_images.append(img_perf)
-    update_report_samples_for_epoch(epoch + 1, top_and_bottom_images, html_file_path)
-    if epoch == 0:
-        webbrowser.open('file://' + os.path.realpath(html_file_path))
 
+    update_report_samples_for_epoch(epoch + 1, performance, html_file_path)
 
 loss_history = LossHistory()
 

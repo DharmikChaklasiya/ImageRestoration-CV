@@ -34,7 +34,7 @@ sorted_image_tensor_groups = []
 
 image_tensor_group_map: Dict[str, ImageTensorGroup] = {}
 
-focal_stack_indices = [0, 15, 30]
+focal_stack_indices = [0, 1, 2, 3, 7, 10, 15, 20, 25, 30]
 
 for img_group in tqdm(sorted_image_groups, desc="Preloading images..."):
     image_tensor_group = ImageTensorGroup(img_group, focal_stack_indices)
@@ -63,12 +63,12 @@ selected_indices = all_indices[:num_samples_for_eval]
 eval_subset = Subset(val_dataset, selected_indices)
 eval_dataloader = torch.utils.data.DataLoader(eval_subset, batch_size=1, shuffle=False)
 
-model = PosePredictionModel(encoder=UNetEncoder(in_channels=3, input_width=512, input_height=512),
+model = PosePredictionModel(encoder=UNetEncoder(in_channels=10, input_width=512, input_height=512),
                             fcconfig=FCConfig(512, 128, 2)).to(device)
 
 loss_function = torch.nn.MSELoss()
 
-optimizer = optim.Adam(model.parameters(), lr=0.00005)
+optimizer = optim.Adam(model.parameters(), lr=0.00001)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
 
 # Number of training epochs
@@ -125,6 +125,7 @@ def evaluate_rows_print_images_to_report():
                                      LabelAndPrediction(pose_pred_label, out), image_group_map[first_img_group_index]))
 
     update_report_samples_for_epoch(epoch + 1, performance, html_file_path)
+
 
 # Training loop
 for epoch in range(num_epochs):

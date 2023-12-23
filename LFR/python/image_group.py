@@ -9,12 +9,12 @@ class ImageGroup:
         assert image_prefix is not None
         assert image_index is not None
         assert 10 > int(image_prefix) >= 0, "Image prefix {} must be a single digit".format(image_prefix)
-        prefix_num = int(image_prefix)*ImageGroup.prefix_digit
+        prefix_num = int(image_prefix) * ImageGroup.prefix_digit
         image_index_num = int(image_index)
         assert image_index_num < ImageGroup.prefix_digit, (("Image index {} must be less than {} or our algorithm of "
-                                                           "combining indices won't work")
+                                                            "combining indices won't work")
                                                            .format(image_index_num, ImageGroup.prefix_digit))
-        return prefix_num+image_index_num
+        return prefix_num + image_index_num
 
     def __init__(self, image_index):
         assert image_index is not None
@@ -45,9 +45,11 @@ class ImageGroup:
         leading_digit = os.path.basename(full_filename).split('_')[0]
         base_path = os.path.dirname(full_filename)
         self.base_output_path = os.path.join(base_output_path, self.formatted_image_index)
-        self.original_ground_truth_file = os.path.join(base_path, f"{leading_digit}_{self.image_index_without_prefix}_GT_pose_0_thermal.png")
+        self.original_ground_truth_file = os.path.join(base_path,
+                                                       f"{leading_digit}_{self.image_index_without_prefix}_GT_pose_0_thermal.png")
         self.new_ground_truth_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_gt.png")
-        self.original_parameter_file = os.path.join(base_path, f"{leading_digit}_{self.image_index_without_prefix}_Parameters.txt")
+        self.original_parameter_file = os.path.join(base_path,
+                                                    f"{leading_digit}_{self.image_index_without_prefix}_Parameters.txt")
         self.new_parameter_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_params.txt")
 
     def initialize_and_validate(self, base_output_path):
@@ -80,18 +82,18 @@ class ImageGroup:
 
     def output_image_name(self, focal_stack_img_index):
         formatted_focal_stack_img_index = str(focal_stack_img_index).zfill(2)
-        return os.path.join(self.base_output_path, f"{self.formatted_image_index}_{formatted_focal_stack_img_index}.png")
+        return os.path.join(self.base_output_path,
+                            f"{self.formatted_image_index}_{formatted_focal_stack_img_index}.png")
 
-    def initialize_output_only(self, base_output_path, focal_stack_indices):
+    def initialize_output_only(self, base_output_path):
         assert base_output_path is not None and isinstance(base_output_path, str)
         self.base_output_path = os.path.join(base_output_path, self.formatted_image_index)
         self.new_ground_truth_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_gt.png")
         self.new_parameter_file = os.path.join(self.base_output_path, f"{self.formatted_image_index}_params.txt")
 
         self.valid = True
-        for focal_stack_idx in focal_stack_indices:
+        for focal_stack_idx in range(0, 30):
             output_img_name = self.output_image_name(focal_stack_idx)
             self.output_file_names.append(output_img_name)
             if not os.path.exists(output_img_name):
-                self.valid = False
-                break
+                raise ValueError("No file found for name : "+output_img_name)

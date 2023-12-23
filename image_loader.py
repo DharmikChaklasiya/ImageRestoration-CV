@@ -39,14 +39,15 @@ class ImageTensorGroup:
         with open(self.image_group.new_parameter_file, 'r') as file:
             shape_encoded, x, y = self.parse_param_file(self.image_group.new_parameter_file, file.readlines())
 
-        self.pose_prediction_labels = torch.tensor([x, y])  # torch.tensor(shape_encoded + [x, y]) we start slowly - predicting everything sadly doesn't work at all
+        self.pose_prediction_labels = torch.tensor([x,
+                                                    y])  # torch.tensor(shape_encoded + [x, y]) we start slowly - predicting everything sadly doesn't work at all
 
     def get_images(self):
-        stacked_images = images_to_tensors(self.image_tensors, self.image_group.formatted_image_index)
+        stacked_images = self.images_to_tensors(self.image_tensors, self.image_group.formatted_image_index)
         return stacked_images, self.ground_truth_tensor, self.image_group.formatted_image_index
 
     def get_images_with_pose_prediction_labels(self):
-        stacked_images = images_to_tensors(self.image_tensors, self.image_group.formatted_image_index)
+        stacked_images = self.images_to_tensors(self.image_tensors, self.image_group.formatted_image_index)
         return stacked_images, self.pose_prediction_labels, self.image_group.formatted_image_index
 
     def parse_param_file(self, parameter_file, lines):
@@ -87,19 +88,19 @@ class ImageTensorGroup:
                     raise ValueError("Invalid person shape in file: " + parameter_file + ", value : " + shape)
         return shape_encoded, x, y
 
-
-def images_to_tensors(image_tensors, image_index):
-    stacked_images = torch.cat(image_tensors, dim=0)  # Shape: (3, 512, 512)
-    assert stacked_images.shape[0] == 3, ("Issue while processing image_group : {} - dimension 1 should be 3, "
-                                          "but is {}").format(image_index,
-                                                              stacked_images.shape[0])
-    assert stacked_images.shape[1] == 512, ("Issue while processing image_group : {} - dimension 2 should be 512, "
-                                            "but is {}").format(image_index,
-                                                                stacked_images.shape[1])
-    assert stacked_images.shape[2] == 512, ("Issue while processing image_group : {} - dimension 3 should be 512, "
-                                            "but is {}").format(image_index,
-                                                                stacked_images.shape[2])
-    return stacked_images
+    def images_to_tensors(self, image_tensors, image_index):
+        stacked_images = torch.cat(image_tensors, dim=0)  # Shape: (focal_stack_indices, 512, 512)
+        focal_stack_height = len(self.focal_stack_indices)
+        assert stacked_images.shape[0] == focal_stack_height, (
+            "Issue while processing image_group : {} - dimension 1 should be {}, but is {}"
+            .format(image_index, focal_stack_height, stacked_images.shape[0]))
+        assert stacked_images.shape[1] == 512, ("Issue while processing image_group : {} - dimension 2 should be 512, "
+                                                "but is {}").format(image_index,
+                                                                    stacked_images.shape[1])
+        assert stacked_images.shape[2] == 512, ("Issue while processing image_group : {} - dimension 3 should be 512, "
+                                                "but is {}").format(image_index,
+                                                                    stacked_images.shape[2])
+        return stacked_images
 
 
 class GroundTruthLabelDataset(torch.utils.data.Dataset):
@@ -135,8 +136,6 @@ print(f"Will load data from rootdir: {root_dir}")
 all_image_groups = []
 image_group_map = {}
 
-focal_stack_indices = [0, 15, 30]
-
 # Iterate over the subfolders
 for root, dirs, files in os.walk(root_dir):
     for dir_name in dirs:
@@ -145,7 +144,7 @@ for root, dirs, files in os.walk(root_dir):
 
             for formatted_image_index in os.listdir(subfolder_path):
                 img_group = ImageGroup(int(formatted_image_index))
-                img_group.initialize_output_only(subfolder_path, focal_stack_indices)
+                img_group.initialize_output_only(subfolder_path)
                 if img_group.valid:
                     all_image_groups.append(img_group)
                     image_group_map[img_group.formatted_image_index] = img_group

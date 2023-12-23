@@ -175,8 +175,11 @@ def create_or_get_html_file(html_file_path):
     return soup
 
 
-def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerformance], html_file_path: str):
+def convert_to_rgb(image_tensor_in):
+    return image_tensor_in.repeat(3, 1, 1)
 
+
+def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerformance], html_file_path: str):
     images_info = rank_performances(performance)
 
     soup = create_or_get_html_file(html_file_path)
@@ -208,14 +211,18 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
         if img_perf.label_and_prediction.is_coordinate_prediction():
 
             if len(img_perf.image_group.output_file_names) <= 2:
-                raise ValueError("We should have filenames, but haven't for : "+img_perf.image_group.base_output_path)
+                raise ValueError("We should have filenames, but haven't for : " + img_perf.image_group.base_output_path)
 
-            median_image_filename = img_perf.image_group.output_file_names[len(img_perf.image_group.output_file_names) // 2]
+            median_image_filename = img_perf.image_group.output_file_names[
+                len(img_perf.image_group.output_file_names) // 2]
 
-            updated_img = add_horizontal_line(img_perf.ground_truth, img_perf.label_and_prediction.label[0])
-            updated_img = add_horizontal_line(updated_img, img_perf.label_and_prediction.prediction[0])
-            updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.label[1])
-            updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.prediction[1])
+            color_red = (1.0, 0.0, 0.0)  # Red color
+            color_green = (0.0, 1.0, 0.0)  # Green color
+
+            updated_img = add_horizontal_line(convert_to_rgb(img_perf.ground_truth), img_perf.label_and_prediction.prediction[0], color_red)
+            updated_img = add_horizontal_line(updated_img, img_perf.label_and_prediction.label[0], color_green)
+            updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.prediction[1], color_red)
+            updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.label[1], color_green)
             gt_base64 = tensor_to_base64(updated_img)
             img_gt = soup.new_tag('img', src=f"data:image/png;base64,{gt_base64}", width="300")
             median_image_tag = soup.new_tag('img', src=median_image_filename, width="300")
@@ -223,9 +230,10 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
             epoch_section.append(median_image_tag)
 
             label_pred_desc = soup.new_tag('p')
-            label_pred_desc.string = (f'Label (x,y) : ({img_perf.label_and_prediction.label[0]}, {img_perf.label_and_prediction.label[1]}) '
-                                      f'Prediction (x,y) : ({img_perf.label_and_prediction.prediction[0]}, {img_perf.label_and_prediction.prediction[1]})'
-                                      )
+            label_pred_desc.string = (
+                f'Label (x,y) : ({img_perf.label_and_prediction.label[0]}, {img_perf.label_and_prediction.label[1]}) '
+                f'Prediction (x,y) : ({img_perf.label_and_prediction.prediction[0]}, {img_perf.label_and_prediction.prediction[1]})'
+            )
             epoch_section.append(label_pred_desc)
         else:
             # Convert tensors to Base64 and append images
@@ -278,29 +286,31 @@ def rank_performances(performance):
     return images_info
 
 
-def add_vertical_line(image_tensor_in: torch.Tensor, y_position):
+def add_vertical_line(image_tensor_in: torch.Tensor, y_position, color):
     """
     Add a vertical line to the image tensor.
     :param image_tensor_in: Tensor of shape [C, H, W]
     :param y_position: X position of the line, in the range [-1.0, 1.0]
     :return: Modified image tensor
+
+    Args:
+        color:
     """
     image_tensor = image_tensor_in.clone()
     C, H, W = image_tensor.shape
     # Normalize x_position to pixel coordinates
-    pixel_y = int((1-y_position) * W / 2)
+    pixel_y = int((1 - y_position) * W / 2)
 
     # Clamp to ensure the x coordinate is within the image width
     pixel_y = max(0, min(W - 1, pixel_y))
 
-    # Draw the line (modifying the tensor in place)
-    # Assuming you want to draw the line in white color, and your tensor is in the range [0, 1]
-    for c in range(C):  # For each channel
-        image_tensor[c, :, pixel_y] = 1.0
+    for i, c in enumerate(color):
+        image_tensor[i, :, pixel_y] = c
 
     return image_tensor
 
-def add_horizontal_line(image_tensor_in: torch.Tensor, x_position):
+
+def add_horizontal_line(image_tensor_in: torch.Tensor, x_position, color):
     """
     Add a horizontal line to the image tensor.
     :param image_tensor_in: Tensor of shape [C, H, W]
@@ -315,10 +325,8 @@ def add_horizontal_line(image_tensor_in: torch.Tensor, x_position):
     # Clamp to ensure the x coordinate is within the image height
     pixel_x = max(0, min(H - 1, pixel_x))
 
-    # Draw the line (modifying the tensor in place)
-    # Assuming you want to draw the line in white color, and your tensor is in the range [0, 1]
-    for c in range(C):  # For each channel
-        image_tensor[c, pixel_x, :] = 1.0
+    for i, c in enumerate(color):
+        image_tensor[i, pixel_x, :] = c
 
     return image_tensor
 

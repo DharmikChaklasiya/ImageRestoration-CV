@@ -209,6 +209,12 @@ def write_update_file(html_file_path, soup):
     buffer_content = buffer.getvalue()
     buffer.close()
 
-    # Overwrite the file with the new content in one go
-    with open(html_file_path, 'w', encoding='utf-8') as file:
-        file.write(buffer_content)
+    try:
+        # Overwrite the file with the new content in one go
+        with open(html_file_path, 'w', encoding='utf-8') as file:
+            file.write(buffer_content)
+    except OSError as e:
+        print(f"Error writing to file: {e}")
+        print(f"File path attempted: {html_file_path}")
+
+

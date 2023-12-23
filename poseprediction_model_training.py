@@ -61,8 +61,8 @@ model = PosePredictionModel(encoder=UNetEncoder(in_channels=3, input_width=512, 
 
 loss_function = torch.nn.MSELoss()
 
-optimizer = optim.Adam(model.parameters(), lr=0.001)  # Consider starting with a lower lr, e.g., 0.0001
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)  # Adjust step_size and gamma as needed
+optimizer = optim.Adam(model.parameters(), lr=0.00005)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
 
 # Number of training epochs
 num_epochs = 1000

@@ -1,9 +1,10 @@
 import os
 import re
-from typing import List
+from typing import List, Dict, Tuple
 
 import torch
-from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
+from torchvision import transforms
 from PIL import Image
 
 from LFR.python.image_group import ImageGroup
@@ -38,8 +39,8 @@ class ImageTensorGroup:
         with open(self.image_group.new_parameter_file, 'r') as file:
             shape_encoded, x, y = self.parse_param_file(self.image_group.new_parameter_file, file.readlines())
 
-        self.pose_prediction_labels = torch.tensor([x,
-                                                    y])  # torch.tensor(shape_encoded + [x, y]) we start slowly - predicting everything sadly doesn't work at all
+        self.pose_prediction_labels = torch.tensor([x, y])  # torch.tensor(shape_encoded + [x, y]) we start slowly -
+        # predicting everything sadly doesn't work at all
 
     def get_images(self):
         stacked_images = self.images_to_tensors(self.image_tensors, self.image_group.formatted_image_index)
@@ -126,36 +127,29 @@ class PosePredictionLabelDataset(torch.utils.data.Dataset):
         return len(self.image_tensor_groups)
 
 
-# Define the root directory
-root_dir = os.path.abspath(os.path.join(os.getcwd(), "..", "..", "computervision", "integrals"))
+def load_input_image_parts(parts: List[str]) -> Tuple[List[ImageGroup], Dict[str, ImageGroup]]:
+    all_image_groups: List[ImageGroup] = []
+    image_group_map: Dict[str, ImageGroup] = {}
 
-print(f"Will load data from rootdir: {root_dir}")
+    root_dir = os.path.abspath(os.path.join(os.getcwd(), "..", "..", "computervision", "integrals"))
 
-# Create a list to store the image file paths
-all_image_groups = []
-image_group_map = {}
+    print(f"Will load parts: {parts} data from rootdir: {root_dir}")
 
-# Iterate over the subfolders
-for root, dirs, files in os.walk(root_dir):
-    for dir_name in dirs:
-        if dir_name == "Part1":
-            subfolder_path = os.path.join(root, dir_name)
+    for root, dirs, files in os.walk(root_dir):
+        for dir_name in dirs:
+            if dir_name in parts:
+                subfolder_path = os.path.join(root, dir_name)
 
-            for formatted_image_index in os.listdir(subfolder_path):
-                img_group = ImageGroup(int(formatted_image_index))
-                img_group.initialize_output_only(subfolder_path)
-                if img_group.valid:
-                    all_image_groups.append(img_group)
-                    image_group_map[img_group.formatted_image_index] = img_group
+                for formatted_image_index in os.listdir(subfolder_path):
+                    img_group = ImageGroup(int(formatted_image_index))
+                    img_group.initialize_output_only(subfolder_path)
+                    if img_group.valid:
+                        all_image_groups.append(img_group)
+                        image_group_map[img_group.formatted_image_index] = img_group
 
-all_image_groups = sorted(all_image_groups, key=lambda img_group: int(img_group.formatted_image_index))
+    all_image_groups = sorted(all_image_groups, key=lambda img_group: int(img_group.formatted_image_index))
+    print(f"Successfully loaded image-batches - len : {len(all_image_groups)}")
 
-print(f"Successfully loaded image-batches - len : {len(all_image_groups)}")
-
-
-def get_image_group_map():
-    return image_group_map
+    return all_image_groups, image_group_map
 
 
-def get_sorted_image_groups():
-    return all_image_groups

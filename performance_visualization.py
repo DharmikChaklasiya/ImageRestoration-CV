@@ -4,87 +4,12 @@ import webbrowser
 from io import BytesIO, StringIO
 from typing import List
 
-import numpy as np
 import torch
 from bs4 import BeautifulSoup
-from matplotlib import pyplot as plt
 from torchvision.transforms import ToPILImage
 
 from LFR.python.image_group import ImageGroup
-from base_model_training import Phase
-
-
-class LossHistory:
-    def __init__(self):
-        self.running_loss = 0.0
-        self.current_avg_val_loss = None
-        self.current_avg_train_loss = None
-        self.training_losses = []
-        self.validation_losses = []
-
-    def add_loss(self, training_loss, validation_loss):
-        self.training_losses.append(training_loss)
-        self.validation_losses.append(validation_loss)
-        self.running_loss = 0.0
-        self.current_avg_val_loss = None
-        self.current_avg_train_loss = None
-
-    def get_loss_plot_base64(self):
-        plt.figure()
-        epochs = np.arange(1, len(self.training_losses) + 1)
-        plt.plot(epochs, self.training_losses, label='Training Loss')
-        plt.plot(epochs, self.validation_losses, label='Validation Loss')
-
-        current_epoch = len(epochs) + 1
-
-        # Plot current average losses if available
-        if self.current_avg_train_loss is not None:
-            plt.scatter(current_epoch, self.current_avg_train_loss, color='blue', marker='x',
-                        label='Current Avg Training Loss')
-
-        if self.current_avg_val_loss is not None:
-            plt.scatter(current_epoch, self.current_avg_val_loss, color='orange', marker='x',
-                        label='Current Avg Validation Loss')
-
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.title('Loss Over Epochs')
-        plt.legend()
-
-        max_loss = 0
-        if self.training_losses and self.validation_losses:
-            max_loss = max(max(self.training_losses), max(self.validation_losses))
-        if self.current_avg_val_loss:
-            max_loss = max(max_loss, self.current_avg_val_loss)
-        if self.current_avg_train_loss:
-            max_loss = max(max_loss, self.current_avg_train_loss)
-        plt.ylim(bottom=0, top=max_loss + 0.1 * max_loss)
-
-        plt.xticks(epochs)
-        plt.tight_layout()
-
-        buffer = BytesIO()
-        plt.savefig(buffer, format='png')
-        plt.close()  # Close the figure to free memory
-        buffer.seek(0)
-        image_png = buffer.getvalue()
-        buffer.close()
-
-        return base64.b64encode(image_png).decode('utf-8')
-
-    def add_current_running_loss(self, batch_num, running_loss, phase):
-        if phase == Phase.TRAINING:
-            if batch_num == 0:
-                self.running_loss = 0.0
-            self.running_loss += running_loss
-            self.current_avg_train_loss = self.running_loss / (batch_num + 1)
-        elif phase == Phase.VALIDATION:
-            if batch_num == 0:
-                self.running_loss = 0.0
-            self.running_loss += running_loss
-            self.current_avg_val_loss = self.running_loss / (batch_num + 1)
-        else:
-            raise ValueError("Unknown phase : " + phase)
+from base_model_training import LossHistory
 
 
 def tensor_to_base64(tensor):

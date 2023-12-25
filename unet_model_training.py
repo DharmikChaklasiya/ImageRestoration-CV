@@ -9,10 +9,10 @@ from torch.nn import functional as F
 from torch.utils.data import Subset
 from tqdm import tqdm
 
-from base_model_training import Phase
-from image_loader import get_sorted_image_groups, get_image_group_map, ImageTensorGroup, GroundTruthLabelDataset
+from base_model_training import Phase, LossHistory
+from image_loader import ImageTensorGroup, GroundTruthLabelDataset, load_input_image_parts
 from performance_visualization import update_report_samples_for_epoch, ImagePerformance, update_report_with_losses, \
-    LossHistory, LabelAndPrediction
+    LabelAndPrediction
 from unet_architecture import UNet
 
 from torch.utils.data import DataLoader, random_split
@@ -40,7 +40,9 @@ else:
 
 focal_stack_indices = [0, 15, 30]
 
-sorted_image_groups = get_sorted_image_groups()
+all_parts = ["Part1", "Part1 2", "Part1 3", "Part2", "Part2 2", "Part 2 3"]
+
+sorted_image_groups, image_group_map = load_input_image_parts([all_parts[0]])
 
 sorted_image_tensor_groups = []
 
@@ -61,8 +63,6 @@ train_dataset, val_dataset = random_split(ground_truth_label_dataset, [train_siz
 # Create DataLoaders for each set
 train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False)
-
-image_group_map = get_image_group_map()
 
 num_samples_for_eval = 100
 all_indices = list(range(len(ground_truth_label_dataset)))
@@ -96,9 +96,11 @@ def evaluate_rows_print_images_to_report():
 
             for gt, out in zip(ground_truth, outputs):
                 loss = loss_function(outputs, ground_truth)
-                performance.append(ImagePerformance(loss.item(), gt, LabelAndPrediction(gt, out), image_group_map[img_group_indices[0]]))
+                performance.append(ImagePerformance(loss.item(), gt, LabelAndPrediction(gt, out),
+                                                    image_group_map[img_group_indices[0]]))
 
     update_report_samples_for_epoch(epoch + 1, performance, html_file_path)
+
 
 loss_history = LossHistory()
 

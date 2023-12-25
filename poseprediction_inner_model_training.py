@@ -6,13 +6,13 @@ from torch import optim, nn
 from torch.utils.data import random_split, DataLoader, Subset
 from tqdm import tqdm
 
-from base_model_training import Phase, LossHistory, DatasetPartMetaInfo
+from base_model_training import Phase, LossHistory, DatasetPartMetaInfo, save_model_and_history
 from image_loader import load_input_image_parts, ImageTensorGroup, PosePredictionLabelDataset
 from performance_visualization import ImagePerformance, LabelAndPrediction, \
     update_report_samples_for_epoch, update_report_with_losses
 
 
-def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, device):
+def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, device, super_batch_info: str):
     sorted_image_groups, image_group_map = load_input_image_parts([batch_part.part_name])
     sorted_image_tensor_groups = []
     image_tensor_group_map: Dict[str, ImageTensorGroup] = {}
@@ -120,11 +120,12 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
                     update_report_with_losses(epoch + 1, loss_history, html_file_path)
 
         avg_val_loss = (loss_history.running_loss / len(val_loader))
-
-        loss_history.add_loss(epoch_loss, avg_val_loss)
-
         scheduler.step()
-
         evaluate_rows_print_images_to_report(model, device, eval_dataloader)
 
-        print(f"\nEpoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}, Validation Loss: {avg_val_loss:.4f}")
+        should_save = loss_history.add_loss(epoch_loss, avg_val_loss)
+        if should_save:
+            save_model_and_history(model, loss_history, "pose_pred_model.pth")
+            print(f"Model saved in {super_batch_info} - epoch {epoch}")
+
+        print(f"\n{super_batch_info} - epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}, Validation Loss: {avg_val_loss:.4f}")

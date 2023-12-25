@@ -29,15 +29,13 @@ for part in all_parts:
     all_image_groups, image_group_map = load_input_image_parts([part])
     dataset_parts[part] = DatasetPartMetaInfo(part, all_image_groups, image_group_map)
 
-print("Training starting - printing initials:")
+num_super_batches = 10
 
-for part, dataset_metainfo in dataset_parts.items():
-    print(dataset_metainfo.to_json())
-
-for i in range(1, 11):
-    print(f"Running the model in super-batches, run :  {i}")
+for i in range(1, num_super_batches + 1):
+    super_batch_info = f"Super-Batch: {i}/{num_super_batches}"
+    print(f"Running the model in super-batches - {super_batch_info}")
     for part, dataset_metainfo in dataset_parts.items():
-        train_model_on_one_batch(dataset_metainfo, model, device)
+        train_model_on_one_batch(dataset_metainfo, model, device, super_batch_info)
 
 print("Training complete - printing results.")
 

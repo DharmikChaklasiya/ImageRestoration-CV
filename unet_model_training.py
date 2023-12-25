@@ -1,23 +1,15 @@
 # Import necessary libraries
-import os
-import webbrowser
-import random
+from typing import Dict
 
 import torch
-from torch import optim
-from torch.nn import functional as F
-from torch.utils.data import Subset
-from tqdm import tqdm
 
-from base_model_training import Phase, LossHistory
-from image_loader import ImageTensorGroup, GroundTruthLabelDataset, load_input_image_parts
-from performance_visualization import update_report_samples_for_epoch, ImagePerformance, update_report_with_losses, \
-    LabelAndPrediction
+from base_model_training import DatasetPartMetaInfo
+from image_loader import load_input_image_parts
 from unet_architecture import UNet
 
-from torch.utils.data import DataLoader, random_split
-
 from pytorch_msssim import SSIM
+
+from unet_inner_model_training import train_model_on_one_batch
 
 ssim_loss = SSIM(data_range=1.0, size_average=True, channel=3)
 
@@ -38,129 +30,25 @@ else:
     device = torch.device("cpu")
     print("Using CPU")
 
-focal_stack_indices = [0, 15, 30]
+all_parts = ["Part1", "Part1 2", "Part1 3", "Part2", "Part2 2", "Part2 3"]
 
-all_parts = ["Part1", "Part1 2", "Part1 3", "Part2", "Part2 2", "Part 2 3"]
+model = UNet(in_channels=10).to(device)
 
-sorted_image_groups, image_group_map = load_input_image_parts([all_parts[0]])
+dataset_parts: Dict[str, DatasetPartMetaInfo] = {}
 
-sorted_image_tensor_groups = []
+for part in all_parts:
+    all_image_groups, image_group_map = load_input_image_parts([part])
+    dataset_parts[part] = DatasetPartMetaInfo(part, all_image_groups, image_group_map)
 
-for img_group in tqdm(sorted_image_groups, desc="Preloading images..."):
-    image_tensor_group = ImageTensorGroup(img_group, focal_stack_indices)
-    image_tensor_group.load_images()
-    sorted_image_tensor_groups.append(image_tensor_group)
+num_super_batches = 10
 
-ground_truth_label_dataset = GroundTruthLabelDataset(sorted_image_tensor_groups)
+for i in range(1, num_super_batches + 1):
+    super_batch_info = f"Super-Batch: {i}/{num_super_batches}"
+    print(f"Running the model in super-batches - {super_batch_info}")
+    for part, dataset_metainfo in dataset_parts.items():
+        train_model_on_one_batch(dataset_metainfo, model, device, super_batch_info)
 
-# Define the ratio or number of items for the split
-train_size = int(0.8 * len(ground_truth_label_dataset))  # 80% for training
-val_size = len(ground_truth_label_dataset) - train_size  # 20% for validation
+print("Training complete - printing results.")
 
-# Split the dataset
-train_dataset, val_dataset = random_split(ground_truth_label_dataset, [train_size, val_size])
-
-# Create DataLoaders for each set
-train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False)
-
-num_samples_for_eval = 100
-all_indices = list(range(len(ground_truth_label_dataset)))
-random.shuffle(all_indices)
-selected_indices = all_indices[:num_samples_for_eval]
-eval_subset = Subset(ground_truth_label_dataset, selected_indices)
-eval_dataloader = torch.utils.data.DataLoader(eval_subset, batch_size=1, shuffle=False)
-
-model = UNet(in_channels=3).to(device)
-
-loss_function = F.l1_loss  # ssim_based_loss  # F.mse_loss
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-# Number of training epochs
-num_epochs = 1000
-
-html_file_path = 'model_run_unet.html'
-
-
-def evaluate_rows_print_images_to_report():
-    global inputs, ground_truth, outputs, loss, i
-    model.eval()
-    performance = []
-    with torch.no_grad():
-
-        eval_dataloader_with_progress = tqdm(eval_dataloader, desc="Processing Evaluation")
-
-        for inputs, ground_truth, img_group_indices in eval_dataloader_with_progress:
-            inputs, ground_truth = inputs.to(device), ground_truth.to(device)
-            outputs = model(inputs)
-
-            for gt, out in zip(ground_truth, outputs):
-                loss = loss_function(outputs, ground_truth)
-                performance.append(ImagePerformance(loss.item(), gt, LabelAndPrediction(gt, out),
-                                                    image_group_map[img_group_indices[0]]))
-
-    update_report_samples_for_epoch(epoch + 1, performance, html_file_path)
-
-
-loss_history = LossHistory()
-
-# Training loop
-for epoch in range(num_epochs):
-    model.train()
-
-    dataloader_with_progress = tqdm(train_loader, desc="Processing Batches")
-
-    for i, batch in enumerate(dataloader_with_progress):
-        inputs, ground_truth, img_group = batch
-
-        inputs, ground_truth = inputs.to(device), ground_truth.to(device)
-
-        optimizer.zero_grad()
-
-        outputs = model(inputs)
-
-        loss = loss_function(outputs, ground_truth)
-
-        loss.backward()
-        optimizer.step()
-
-        loss_history.add_current_running_loss(i, loss.item(), Phase.TRAINING)
-
-        dataloader_with_progress.set_description(
-            f"Epoch {epoch + 1}/{num_epochs} - Batch {i + 1}/{len(train_loader)} Processing {img_group}, "
-            f"Loss: {loss.item():.4f}, Avg loss so far: {loss_history.current_avg_train_loss:.4f}"
-        )
-
-        if i % 20 == 0 or i == len(train_loader) - 1:
-            update_report_with_losses(epoch + 1, loss_history, html_file_path)
-
-    # Print average loss for the epoch
-    epoch_loss = loss_history.running_loss / len(train_loader)
-
-    model.eval()
-
-    val_dataloader_with_progress = tqdm(val_loader, desc="Processing Validation")
-
-    with torch.no_grad():
-        for i, batch in enumerate(val_dataloader_with_progress):
-            inputs, ground_truth, img_group = batch
-
-            inputs, ground_truth = inputs.to(device), ground_truth.to(device)
-
-            outputs = model(inputs)
-
-            loss = loss_function(outputs, ground_truth)
-            loss_history.add_current_running_loss(i, loss.item(), Phase.VALIDATION)
-
-            if i % 20 == 0 or i == len(val_loader) - 1:
-                update_report_with_losses(epoch + 1, loss_history, html_file_path)
-
-    avg_val_loss = loss_history.running_loss / len(val_loader)
-
-    evaluate_rows_print_images_to_report()
-
-    loss_history.add_loss(epoch_loss, avg_val_loss)
-
-    print(f"\nEpoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}, Validation Loss: {avg_val_loss:.4f}")
-
-print("Training complete")
+for part, dataset_metainfo in dataset_parts.items():
+    print(dataset_metainfo.to_json())

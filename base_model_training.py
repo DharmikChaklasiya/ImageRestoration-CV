@@ -28,6 +28,7 @@ class LossHistory:
         self.current_avg_train_loss = None
         self.training_losses = []
         self.validation_losses = []
+        self.min_val_loss = float('inf')
 
     def to_json(self):
         return {
@@ -35,12 +36,16 @@ class LossHistory:
             "validation_losses": self.validation_losses
         }
 
-    def add_loss(self, training_loss, validation_loss):
+    def add_loss(self, training_loss, validation_loss) -> bool:
         self.training_losses.append(training_loss)
         self.validation_losses.append(validation_loss)
         self.running_loss = 0.0
         self.current_avg_val_loss = None
         self.current_avg_train_loss = None
+        if validation_loss < self.min_val_loss:
+            self.min_val_loss = validation_loss
+            return True  # Indicate that the model should be saved
+        return False
 
     def get_loss_plot_base64(self):
         plt.figure()
@@ -112,7 +117,7 @@ class DatasetPartMetaInfo:
         self.train_indices = []
         self.val_indices = []
         self.eval_indices = []
-        self.loss_history = LossHistory()
+        self.loss_history: LossHistory = LossHistory()
 
         self._create_indices()
 
@@ -146,6 +151,17 @@ class DatasetPartMetaInfo:
         eval_loader = DataLoader(eval_subset, batch_size=eval_batch_size, shuffle=False)
 
         return train_loader, val_loader, eval_loader
+
+
+def save_model_and_history(model, loss_history, filename):
+    state = {
+        'model_state_dict': model.state_dict(),
+        'loss_history': {
+            'training_losses': loss_history.training_losses,
+            'validation_losses': loss_history.validation_losses
+        }
+    }
+    torch.save(state, filename)
 
 
 def normalize_x_and_y_labels(sorted_img_tensor_grps):

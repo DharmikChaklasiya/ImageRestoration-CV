@@ -1,4 +1,6 @@
 import base64
+import json
+import os
 import random
 from enum import Enum
 from io import BytesIO
@@ -9,11 +11,11 @@ import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from pydantic import BaseModel
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from image_group import ImageGroup
-from image_loader import PosePredictionLabelDataset
+from image_loader import PosePredictionLabelDataset, load_input_image_parts
 
 
 class Phase(Enum):
@@ -166,14 +168,24 @@ class DatasetPartMetaInfo(BaseModel):
             img_group.initialize_output_only(self.base_output_path, False)
             image_group_map[formatted_image_index] = img_group
 
-        train_data = [dataset[self.image_group_map[index]] for index in self.train_indices]
-        val_data = [dataset[self.image_group_map[index]] for index in self.val_indices]
-        eval_data = [dataset[self.image_group_map[index]] for index in self.eval_indices]
+        image_formatted_to_numerical_index_map = {}
+
+        for i, (_, _, formatted_image_index) in enumerate(dataset):
+            formatted_image_index = image_group_map[formatted_image_index].formatted_image_index
+            image_formatted_to_numerical_index_map[formatted_image_index] = i
+
+        num_train_indices = [image_formatted_to_numerical_index_map[idx] for idx in self.train_indices]
+        num_val_indices = [image_formatted_to_numerical_index_map[idx] for idx in self.val_indices]
+        num_eval_indices = [image_formatted_to_numerical_index_map[idx] for idx in self.eval_indices]
+
+        train_subset = Subset(dataset, num_train_indices)
+        val_subset = Subset(dataset, num_val_indices)
+        eval_subset = Subset(dataset, num_eval_indices)
 
         # Create DataLoaders
-        train_loader = DataLoader(train_data, batch_size=4, shuffle=True)
-        val_loader = DataLoader(val_data, batch_size=4, shuffle=False)
-        eval_loader = DataLoader(eval_data, batch_size=1, shuffle=False)
+        train_loader = DataLoader(train_subset, batch_size=4, shuffle=True)
+        val_loader = DataLoader(val_subset, batch_size=4, shuffle=False)
+        eval_loader = DataLoader(eval_subset, batch_size=1, shuffle=False)
 
         return train_loader, val_loader, eval_loader
 
@@ -209,3 +221,32 @@ def normalize_x_and_y_labels(sorted_img_tensor_grps):
         min_x = min(min_x, x_values.min().item())
         min_y = min(min_y, y_values.min().item())
     print(f"Max X: {max_x}, Max Y: {max_y}, Min X: {min_x}, Min Y: {min_y}")
+
+
+def load_dataset_infos(all_parts):
+    ds_parts: Dict[str, DatasetPartMetaInfo] = {}
+    for part in all_parts:
+        # Define the file path for the saved data
+        file_path = f"dataset_infos/{part}_dataset_info.json"
+
+        if os.path.exists(file_path):
+            print(f"Load the existing DatasetPartMetaInfo from the file {file_path}")
+            with open(file_path, 'r') as file:
+                data = json.load(file)
+                dataset_part_info = DatasetPartMetaInfo.parse_obj(data)
+                ds_parts[part] = dataset_part_info
+        else:
+            print(f"Create new DatasetPartMetaInfo and save it to file {file_path}")
+            all_image_groups, image_group_map = load_input_image_parts([part])
+            dataset_part_info = DatasetPartMetaInfo(part_name=part,
+                                                    all_indices=[img_group.formatted_image_index for img_group in
+                                                                 all_image_groups],
+                                                    base_output_path=all_image_groups[0].base_path)
+
+            # Save to JSON
+            with open(file_path, 'w') as file:
+                json.dump(dataset_part_info.dict(), file, indent=4)
+
+            ds_parts[part] = dataset_part_info
+
+    return ds_parts

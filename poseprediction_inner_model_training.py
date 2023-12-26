@@ -25,7 +25,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
         sorted_image_tensor_groups.append(image_tensor_group)
 
     pose_prediction_label_dataset = PosePredictionLabelDataset(sorted_image_tensor_groups)
-    loss_history = batch_part.loss_history
+    loss_history: LossHistory = batch_part.loss_history
 
     train_loader, val_loader, eval_dataloader = batch_part.create_dataloaders(pose_prediction_label_dataset)
 
@@ -93,13 +93,13 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
             dataloader_with_progress.set_description(
                 f"Epoch {epoch + 1}/{num_epochs} - Batch {i + 1}/{len(train_loader)} "
                 f"Processing {img_group_index}, Loss: {current_loss:.4f}, "
-                f"Avg loss so far: {loss_history.current_avg_train_loss:.4f}"
+                f"Avg loss so far: {loss_history.current_running_loss.current_avg_train_loss:.4f}"
             )
 
             if i % 20 == 0 or i == len(train_loader) - 1:
                 update_report_with_losses(epoch + 1, loss_history, html_file_path)
 
-        epoch_loss = loss_history.running_loss / len(train_loader)
+        epoch_loss = loss_history.current_running_loss.running_loss / len(train_loader)
 
         model.eval()
 
@@ -119,7 +119,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
                 if i % 20 == 0 or i == len(val_loader) - 1:
                     update_report_with_losses(epoch + 1, loss_history, html_file_path)
 
-        avg_val_loss = (loss_history.running_loss / len(val_loader))
+        avg_val_loss = (loss_history.current_running_loss.running_loss / len(val_loader))
         scheduler.step()
         evaluate_rows_print_images_to_report(model, device, eval_dataloader)
 
@@ -128,4 +128,4 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
             save_model_and_history(model, loss_history, "pose_pred_model.pth")
             print(f"Model saved in {super_batch_info} - epoch {epoch}")
 
-        print(f"\n{super_batch_info} - epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}, Validation Loss: {avg_val_loss:.4f}")
+        print(f"\n{super_batch_info} - part: {batch_part.part_name} - epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.6f}, Validation Loss: {avg_val_loss:.6f}")

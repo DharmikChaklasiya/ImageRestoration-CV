@@ -3,7 +3,7 @@ from typing import Dict
 import torch
 
 from image_loader import load_input_image_parts
-from base_model_training import DatasetPartMetaInfo
+from base_model_training import DatasetPartMetaInfo, load_dataset_infos
 from poseprediction_architecture import PosePredictionModel, FCConfig
 from poseprediction_inner_model_training import train_model_on_one_batch
 from unet_encoder import UNetEncoder
@@ -23,11 +23,7 @@ all_parts = ["Part1", "Part1 2", "Part1 3", "Part2", "Part2 2", "Part2 3"]
 model = PosePredictionModel(encoder=UNetEncoder(in_channels=10, input_width=512, input_height=512),
                             fcconfig=FCConfig(512, 128, 2)).to(device)
 
-dataset_parts: Dict[str, DatasetPartMetaInfo] = {}
-
-for part in all_parts:
-    all_image_groups, image_group_map = load_input_image_parts([part])
-    dataset_parts[part] = DatasetPartMetaInfo(part, all_image_groups, image_group_map)
+dataset_parts = load_dataset_infos(all_parts)
 
 num_super_batches = 10
 

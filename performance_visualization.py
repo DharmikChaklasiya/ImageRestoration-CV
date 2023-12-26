@@ -8,8 +8,8 @@ import torch
 from bs4 import BeautifulSoup
 from torchvision.transforms import ToPILImage
 
-from LFR.python.image_group import ImageGroup
 from base_model_training import LossHistory
+from image_group import ImageGroup
 
 
 def tensor_to_base64(tensor):
@@ -57,13 +57,14 @@ def update_report_with_losses(epoch, loss_history: LossHistory, html_file_path):
     epoch_title.string = f'Epoch {epoch}'
     loss_info_section.append(epoch_title)
 
-    training_loss_paragraph = soup.new_tag('p')
-    training_loss_paragraph.string = f'Training Loss: {loss_history.current_avg_train_loss:.4f}'
-    loss_info_section.append(training_loss_paragraph)
+    if loss_history.current_running_loss:
+        training_loss_paragraph = soup.new_tag('p')
+        training_loss_paragraph.string = f'Training Loss: {loss_history.current_running_loss.current_avg_train_loss:.6f}'
+        loss_info_section.append(training_loss_paragraph)
 
-    if loss_history.current_avg_val_loss:
+    if loss_history.current_running_loss and loss_history.current_running_loss.has_avg_val_loss():
         validation_loss_paragraph = soup.new_tag('p')
-        validation_loss_paragraph.string = f'Validation Loss: {loss_history.current_avg_val_loss:.4f}'
+        validation_loss_paragraph.string = f'Validation Loss: {loss_history.current_running_loss.current_avg_val_loss:.6f}'
         loss_info_section.append(validation_loss_paragraph)
 
     # Get the base64-encoded loss plot image from the LossHistory object
@@ -127,19 +128,19 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
         description.append(description_str)
 
         # Create a hyperlink to the image output
-        link = soup.new_tag('a', href=img_perf.image_group.base_output_path)
-        link.string = f"{img_perf.image_group.base_output_path}"
+        link = soup.new_tag('a', href=img_perf.image_group.base_path)
+        link.string = f"{img_perf.image_group.base_path}"
         description.append(link)
 
         epoch_section.append(description)
 
         if img_perf.label_and_prediction.is_coordinate_prediction():
 
-            if len(img_perf.image_group.output_file_names) <= 2:
-                raise ValueError("We should have filenames, but haven't for : " + img_perf.image_group.base_output_path)
+            if len(img_perf.image_group.filenames) <= 2:
+                raise ValueError("We should have filenames, but haven't for : " + img_perf.image_group.base_path)
 
-            median_image_filename = img_perf.image_group.output_file_names[
-                len(img_perf.image_group.output_file_names) // 2]
+            median_image_filename = img_perf.image_group.filenames[
+                len(img_perf.image_group.filenames) // 2]
 
             color_red = (1.0, 0.0, 0.0)  # Red color
             color_green = (0.0, 1.0, 0.0)  # Green color
@@ -156,8 +157,8 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
 
             label_pred_desc = soup.new_tag('p')
             label_pred_desc.string = (
-                f'Label (x,y) : ({img_perf.label_and_prediction.label[0]}, {img_perf.label_and_prediction.label[1]}) '
-                f'Prediction (x,y) : ({img_perf.label_and_prediction.prediction[0]}, {img_perf.label_and_prediction.prediction[1]})'
+                f'Label (x,y) : ({img_perf.label_and_prediction.label[0]:.3f}, {img_perf.label_and_prediction.label[1]:.3f})'
+                f'Prediction (x,y) : ({img_perf.label_and_prediction.prediction[0]:.3f}, {img_perf.label_and_prediction.prediction[1]:.3f})'
             )
             epoch_section.append(label_pred_desc)
         else:

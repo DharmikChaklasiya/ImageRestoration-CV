@@ -1,12 +1,8 @@
 # Import necessary libraries
-import json
-import os
-from typing import Dict
 
 import torch
 
-from base_model_training import DatasetPartMetaInfo
-from image_loader import load_input_image_parts
+from base_model_training import load_dataset_infos
 from unet_architecture import UNet
 
 from pytorch_msssim import SSIM
@@ -36,30 +32,7 @@ all_parts = ["Part1", "Part1 2", "Part1 3", "Part2", "Part2 2", "Part2 3"]
 
 model = UNet(in_channels=10).to(device)
 
-dataset_parts: Dict[str, DatasetPartMetaInfo] = {}
-
-for part in all_parts:
-    # Define the file path for the saved data
-    file_path = f"dataset_infos/{part}_dataset_info.json"
-
-    if os.path.exists(file_path):
-        print(f"Load the existing DatasetPartMetaInfo from the file {file_path}")
-        with open(file_path, 'r') as file:
-            data = json.load(file)
-            dataset_part_info = DatasetPartMetaInfo.parse_obj(data)
-            dataset_parts[part] = dataset_part_info
-    else:
-        print(f"Create new DatasetPartMetaInfo and save it to file {file_path}")
-        all_image_groups, image_group_map = load_input_image_parts([part])
-        dataset_part_info = DatasetPartMetaInfo(part_name=part,
-                                                all_indices=[img_group.formatted_image_index for img_group in all_image_groups],
-                                                base_output_path=all_image_groups[0].base_path)
-
-        # Save to JSON
-        with open(file_path, 'w') as file:
-            json.dump(dataset_part_info.dict(), file, indent=4)
-
-        dataset_parts[part] = dataset_part_info
+dataset_parts = load_dataset_infos(all_parts)
 
 num_super_batches = 10
 

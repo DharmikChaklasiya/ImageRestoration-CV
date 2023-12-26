@@ -13,3 +13,4 @@ dependencies:
   - bs4
   - matplotlib
   - pytorch-msssim
+  - pydantic

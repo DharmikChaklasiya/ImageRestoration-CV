@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from PIL import Image
 
-from LFR.python.image_group import ImageGroup
+from image_group import ImageGroup
 
 
 class ImageTensorGroup:
@@ -31,13 +31,13 @@ class ImageTensorGroup:
             self.image_tensors.append(self.transform(image))
 
         try:
-            opened_image = Image.open(self.image_group.new_ground_truth_file).convert('L')
+            opened_image = Image.open(self.image_group.ground_truth_file).convert('L')
         except Exception as e:
-            raise ValueError(f"Error while loading image from: {self.image_group.new_ground_truth_file}") from e
+            raise ValueError(f"Error while loading image from: {self.image_group.ground_truth_file}") from e
         self.ground_truth_tensor = self.transform(opened_image)
 
-        with open(self.image_group.new_parameter_file, 'r') as file:
-            shape_encoded, x, y = self.parse_param_file(self.image_group.new_parameter_file, file.readlines())
+        with open(self.image_group.parameter_file, 'r') as file:
+            shape_encoded, x, y = self.parse_param_file(self.image_group.parameter_file, file.readlines())
 
         self.pose_prediction_labels = torch.tensor([x, y])  # torch.tensor(shape_encoded + [x, y]) we start slowly -
         # predicting everything sadly doesn't work at all
@@ -133,21 +133,23 @@ def load_input_image_parts(parts: List[str]) -> Tuple[List[ImageGroup], Dict[str
 
     root_dir = os.path.abspath(os.path.join(os.getcwd(), "..", "..", "computervision", "integrals"))
 
-    print(f"Will load parts: {parts} data from rootdir: {root_dir}")
+    print(f"Will load parts: {parts} data from root dir: {root_dir}")
 
     for root, dirs, files in os.walk(root_dir):
         for dir_name in dirs:
             if dir_name in parts:
-                subfolder_path = os.path.join(root, dir_name)
+                sub_folder_path = os.path.join(root, dir_name)
 
-                for formatted_image_index in os.listdir(subfolder_path):
-                    img_group = ImageGroup(int(formatted_image_index))
-                    img_group.initialize_output_only(subfolder_path)
+                for formatted_image_index in os.listdir(sub_folder_path):
+                    img_group = ImageGroup(formatted_image_index=formatted_image_index)
+                    img_group.initialize_output_only(sub_folder_path, True)
                     if img_group.valid:
                         all_image_groups.append(img_group)
                         image_group_map[img_group.formatted_image_index] = img_group
+                    else:
+                        print("Invalid image : "+img_group.base_path)
 
-    all_image_groups = sorted(all_image_groups, key=lambda img_group: int(img_group.formatted_image_index))
+    all_image_groups = sorted(all_image_groups, key=lambda img_group1: int(img_group1.formatted_image_index))
     print(f"Successfully loaded image-batches - len : {len(all_image_groups)}")
 
     return all_image_groups, image_group_map

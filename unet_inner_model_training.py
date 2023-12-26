@@ -1,17 +1,14 @@
-import random
 from typing import Dict
 
 import torch
 from torch import optim
 from torch.nn import functional as F
-from torch.utils.data import random_split, DataLoader, Subset
 from tqdm import tqdm
 
-from base_model_training import LossHistory, Phase, save_model_and_history
+from base_model_training import Phase, save_model_and_history
 from image_loader import load_input_image_parts, ImageTensorGroup, GroundTruthLabelDataset
 from performance_visualization import ImagePerformance, LabelAndPrediction, update_report_samples_for_epoch, \
     update_report_with_losses
-from unet_architecture import UNet
 
 
 def train_model_on_one_batch(batch_part, model, device, super_batch_info):

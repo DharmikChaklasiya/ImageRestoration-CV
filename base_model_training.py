@@ -1,5 +1,4 @@
 import base64
-import json
 import random
 from enum import Enum
 from io import BytesIO
@@ -9,10 +8,11 @@ from typing import List, Dict, Tuple
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
-from torch.utils.data import DataLoader, Subset
+from pydantic import BaseModel
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from LFR.python.image_group import ImageGroup
+from image_group import ImageGroup
 from image_loader import PosePredictionLabelDataset
 
 
@@ -21,27 +21,52 @@ class Phase(Enum):
     VALIDATION = "validation"
 
 
-class LossHistory:
-    def __init__(self):
-        self.running_loss = 0.0
-        self.current_avg_val_loss = None
-        self.current_avg_train_loss = None
-        self.training_losses = []
-        self.validation_losses = []
-        self.min_val_loss = float('inf')
+class CurrentRunningLoss(BaseModel):
+    running_loss: float = 0.0
+    current_avg_val_loss: float = float('inf')
+    current_avg_train_loss: float = float('inf')
 
-    def to_json(self):
-        return {
-            "training_losses": self.training_losses,
-            "validation_losses": self.validation_losses
-        }
+    def reset(self):
+        self.running_loss = 0.0
+        self.current_avg_val_loss: float = float('inf')
+        self.current_avg_train_loss: float = float('inf')
+
+    def has_avg_train_loss(self):
+        return self.current_avg_train_loss < float('inf')
+
+    def has_avg_val_loss(self):
+        return self.current_avg_val_loss < float('inf')
+
+    def add_running_loss(self, batch_num, running_loss, phase):
+        if phase == Phase.TRAINING:
+            if batch_num == 0:
+                self.reset()
+            self.running_loss += running_loss
+            self.current_avg_train_loss = self.running_loss / (batch_num + 1)
+        elif phase == Phase.VALIDATION:
+            if batch_num == 0:
+                self.reset()
+            self.running_loss += running_loss
+            self.current_avg_val_loss = self.running_loss / (batch_num + 1)
+        else:
+            raise ValueError("Unknown phase : " + phase)
+
+
+class LossHistory(BaseModel):
+    training_losses: List[float] = []
+    validation_losses: List[float] = []
+    min_val_loss: float = float('inf')
+    current_running_loss: CurrentRunningLoss = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if self.validation_losses:
+            self.min_val_loss = min(self.validation_losses)
 
     def add_loss(self, training_loss, validation_loss) -> bool:
         self.training_losses.append(training_loss)
         self.validation_losses.append(validation_loss)
-        self.running_loss = 0.0
-        self.current_avg_val_loss = None
-        self.current_avg_train_loss = None
+        self.current_running_loss = CurrentRunningLoss()
         if validation_loss < self.min_val_loss:
             self.min_val_loss = validation_loss
             return True  # Indicate that the model should be saved
@@ -56,12 +81,14 @@ class LossHistory:
         current_epoch = len(epochs) + 1
 
         # Plot current average losses if available
-        if self.current_avg_train_loss is not None:
-            plt.scatter(current_epoch, self.current_avg_train_loss, color='blue', marker='x',
+        has_avg_train_loss = self.current_running_loss and self.current_running_loss.has_avg_train_loss()
+        has_avg_val_loss = self.current_running_loss and self.current_running_loss.has_avg_val_loss()
+        if has_avg_train_loss:
+            plt.scatter(current_epoch, self.current_running_loss.current_avg_train_loss, color='blue', marker='x',
                         label='Current Avg Training Loss')
 
-        if self.current_avg_val_loss is not None:
-            plt.scatter(current_epoch, self.current_avg_val_loss, color='orange', marker='x',
+        if has_avg_val_loss:
+            plt.scatter(current_epoch, self.current_running_loss.current_avg_val_loss, color='orange', marker='x',
                         label='Current Avg Validation Loss')
 
         plt.xlabel('Epoch')
@@ -72,10 +99,10 @@ class LossHistory:
         max_loss = 0
         if self.training_losses and self.validation_losses:
             max_loss = max(max(self.training_losses), max(self.validation_losses))
-        if self.current_avg_val_loss:
-            max_loss = max(max_loss, self.current_avg_val_loss)
-        if self.current_avg_train_loss:
-            max_loss = max(max_loss, self.current_avg_train_loss)
+        if has_avg_val_loss:
+            max_loss = max(max_loss, self.current_running_loss.current_avg_val_loss)
+        if has_avg_train_loss:
+            max_loss = max(max_loss, self.current_running_loss.current_avg_train_loss)
         plt.ylim(bottom=0, top=max_loss + 0.1 * max_loss)
 
         plt.xticks(epochs)
@@ -91,64 +118,62 @@ class LossHistory:
         return base64.b64encode(image_png).decode('utf-8')
 
     def add_current_running_loss(self, batch_num, running_loss, phase):
-        if phase == Phase.TRAINING:
-            if batch_num == 0:
-                self.running_loss = 0.0
-            self.running_loss += running_loss
-            self.current_avg_train_loss = self.running_loss / (batch_num + 1)
-        elif phase == Phase.VALIDATION:
-            if batch_num == 0:
-                self.running_loss = 0.0
-            self.running_loss += running_loss
-            self.current_avg_val_loss = self.running_loss / (batch_num + 1)
-        else:
-            raise ValueError("Unknown phase : " + phase)
+        if self.current_running_loss is None:
+            self.current_running_loss = CurrentRunningLoss()
+        self.current_running_loss.add_running_loss(batch_num, running_loss, phase)
 
 
-class DatasetPartMetaInfo:
-    def __init__(self, part_name: str, all_image_groups: List[ImageGroup], image_group_map: Dict[str, ImageGroup]):
-        assert part_name is not None
-        self.part_name = part_name
-        self.image_group_map = image_group_map
-        self.total_size = len(all_image_groups)
-        self.val_ratio = 0.1
-        self.num_samples_for_eval = 100
+class DatasetPartMetaInfo(BaseModel):
+    part_name: str
+    val_ratio: float = 0.2
+    num_samples_for_eval: int = 100
+    train_indices: List[str] = []
+    val_indices: List[str] = []
+    eval_indices: List[str] = []
+    all_indices: List[str] = []
+    base_output_path: str
+    loss_history: LossHistory = LossHistory()
 
-        self.train_indices = []
-        self.val_indices = []
-        self.eval_indices = []
-        self.loss_history: LossHistory = LossHistory()
-
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._create_indices()
 
-    def to_json(self):
-        data = {
-            "part_name": self.part_name,
-            "total_size": self.total_size,
-            "loss_history": self.loss_history.to_json()
-        }
-        return json.dumps(data, indent=4)
-
     def _create_indices(self):
-        all_indices = list(range(self.total_size))
-        random.shuffle(all_indices)
+        if self.val_indices and len(self.val_indices) > 0:
+            # already initialized / loaded from json, we may not redo the randomization split
+            return
 
-        val_size = int(self.total_size * self.val_ratio)
-        train_size = self.total_size - val_size
+        print(f"Attention, we are doing the random split in train/validation data! this should only happen once per {self.part_name}")
 
-        self.train_indices = all_indices[:train_size]
-        self.val_indices = all_indices[train_size:]
+        random.shuffle(self.all_indices)
+
+        total_size = len(self.all_indices)
+
+        val_size = int(total_size * self.val_ratio)
+        train_size = total_size - val_size
+
+        self.train_indices = self.all_indices[:train_size]
+        self.val_indices = self.all_indices[train_size:]
         self.eval_indices = random.sample(self.val_indices, self.num_samples_for_eval)
 
     def create_dataloaders(self, dataset: torch.utils.data.Dataset, train_batch_size=4, val_batch_size=4,
                            eval_batch_size=1) -> Tuple[DataLoader, DataLoader, DataLoader]:
-        train_subset = Subset(dataset, self.train_indices)
-        val_subset = Subset(dataset, self.val_indices)
-        eval_subset = Subset(dataset, self.eval_indices)
 
-        train_loader = DataLoader(train_subset, batch_size=train_batch_size, shuffle=True)
-        val_loader = DataLoader(val_subset, batch_size=val_batch_size, shuffle=False)
-        eval_loader = DataLoader(eval_subset, batch_size=eval_batch_size, shuffle=False)
+        image_group_map = {}
+
+        for formatted_image_index in self.all_indices:
+            img_group = ImageGroup(formatted_image_index=formatted_image_index)
+            img_group.initialize_output_only(self.base_output_path, False)
+            image_group_map[formatted_image_index] = img_group
+
+        train_data = [dataset[self.image_group_map[index]] for index in self.train_indices]
+        val_data = [dataset[self.image_group_map[index]] for index in self.val_indices]
+        eval_data = [dataset[self.image_group_map[index]] for index in self.eval_indices]
+
+        # Create DataLoaders
+        train_loader = DataLoader(train_data, batch_size=4, shuffle=True)
+        val_loader = DataLoader(val_data, batch_size=4, shuffle=False)
+        eval_loader = DataLoader(eval_data, batch_size=1, shuffle=False)
 
         return train_loader, val_loader, eval_loader
 

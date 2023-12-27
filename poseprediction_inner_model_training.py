@@ -6,13 +6,15 @@ from torch import optim, nn
 from torch.utils.data import random_split, DataLoader, Subset
 from tqdm import tqdm
 
-from base_model_training import Phase, LossHistory, DatasetPartMetaInfo, save_model_and_history
+from base_model_training import Phase, LossHistory, DatasetPartMetaInfo, save_model_and_history, \
+    save_datasetpart_metainfo
 from image_loader import load_input_image_parts, ImageTensorGroup, PosePredictionLabelDataset
 from performance_visualization import ImagePerformance, LabelAndPrediction, \
     update_report_samples_for_epoch, update_report_with_losses
 
 
-def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, device, super_batch_info: str):
+def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, device, super_batch_info: str,
+                             model_file_name="pose_pred_model.pth"):
     sorted_image_groups, image_group_map = load_input_image_parts([batch_part.part_name])
     sorted_image_tensor_groups = []
     image_tensor_group_map: Dict[str, ImageTensorGroup] = {}
@@ -25,7 +27,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
         sorted_image_tensor_groups.append(image_tensor_group)
 
     pose_prediction_label_dataset = PosePredictionLabelDataset(sorted_image_tensor_groups)
-    loss_history: LossHistory = batch_part.loss_history
+    loss_history: LossHistory = batch_part.get_loss_history(model_file_name)
 
     train_loader, val_loader, eval_dataloader = batch_part.create_dataloaders(pose_prediction_label_dataset)
 
@@ -91,9 +93,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
             current_loss = loss.item()
 
             dataloader_with_progress.set_description(
-                f"Epoch {epoch + 1}/{num_epochs} - Batch {i + 1}/{len(train_loader)} "
-                f"Processing {img_group_index}, Loss: {current_loss:.4f}, "
-                f"Avg loss so far: {loss_history.current_running_loss.current_avg_train_loss:.4f}"
+                f"{super_batch_info}-part:{batch_part.part_name}-epoch {epoch + 1}/{num_epochs}-Batch {i + 1}/{len(train_loader)} Processing {img_group_index}, Loss: {current_loss:.4f}, Avg loss so far: {loss_history.current_running_loss.current_avg_train_loss:.4f}"
             )
 
             if i % 20 == 0 or i == len(train_loader) - 1:
@@ -125,7 +125,9 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
 
         should_save = loss_history.add_loss(epoch_loss, avg_val_loss)
         if should_save:
-            save_model_and_history(model, loss_history, "pose_pred_model.pth")
-            print(f"Model saved in {super_batch_info} - epoch {epoch}")
+            save_model_and_history(model, loss_history, model_file_name)
+            save_datasetpart_metainfo(batch_part)
+            print(f"\n\nModel saved in {super_batch_info} - epoch {epoch}")
 
-        print(f"\n{super_batch_info} - part: {batch_part.part_name} - epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.6f}, Validation Loss: {avg_val_loss:.6f}")
+        print(f"\n{super_batch_info}-part:{batch_part.part_name}-epoch {epoch + 1}/{num_epochs}, "
+              f"Loss: {epoch_loss:.6f}, Validation Loss: {avg_val_loss:.6f}")

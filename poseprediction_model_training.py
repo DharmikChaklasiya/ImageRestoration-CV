@@ -1,9 +1,6 @@
-from typing import Dict
-
 import torch
 
-from image_loader import load_input_image_parts
-from base_model_training import DatasetPartMetaInfo, load_dataset_infos
+from base_model_training import load_dataset_infos, load_model_and_history
 from poseprediction_architecture import PosePredictionModel, FCConfig
 from poseprediction_inner_model_training import train_model_on_one_batch
 from unet_encoder import UNetEncoder
@@ -27,11 +24,15 @@ dataset_parts = load_dataset_infos(all_parts)
 
 num_super_batches = 10
 
+model_file_name = "pose_pred_model.pth"
+
+load_model_and_history(model, model_file_name)
+
 for i in range(1, num_super_batches + 1):
     super_batch_info = f"Super-Batch: {i}/{num_super_batches}"
     print(f"Running the model in super-batches - {super_batch_info}")
     for part, dataset_metainfo in dataset_parts.items():
-        train_model_on_one_batch(dataset_metainfo, model, device, super_batch_info)
+        train_model_on_one_batch(dataset_metainfo, model, device, super_batch_info, model_file_name)
 
 print("Training complete - printing results.")
 

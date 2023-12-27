@@ -129,12 +129,12 @@ class DatasetPartMetaInfo(BaseModel):
     part_name: str
     val_ratio: float = 0.2
     num_samples_for_eval: int = 100
+    base_output_path: str
+    loss_histories: Dict[str, LossHistory] = {}
     train_indices: List[str] = []
     val_indices: List[str] = []
     eval_indices: List[str] = []
     all_indices: List[str] = []
-    base_output_path: str
-    loss_history: LossHistory = LossHistory()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -145,7 +145,8 @@ class DatasetPartMetaInfo(BaseModel):
             # already initialized / loaded from json, we may not redo the randomization split
             return
 
-        print(f"Attention, we are doing the random split in train/validation data! this should only happen once per {self.part_name}")
+        print(
+            f"Attention, we are doing the random split in train/validation data! this should only happen once per {self.part_name}")
 
         random.shuffle(self.all_indices)
 
@@ -189,6 +190,9 @@ class DatasetPartMetaInfo(BaseModel):
 
         return train_loader, val_loader, eval_loader
 
+    def get_loss_history(self, model_file_name):
+        return self.loss_histories.setdefault(model_file_name, LossHistory())
+
 
 def save_model_and_history(model, loss_history, filename):
     state = {
@@ -199,6 +203,24 @@ def save_model_and_history(model, loss_history, filename):
         }
     }
     torch.save(state, filename)
+
+
+def load_model_and_history(model, filename):
+    try:
+        state = torch.load(filename)
+        model.load_state_dict(state['model_state_dict'])
+
+        print(f"\nLoaded model from file {filename}.")
+
+        loss_history_data = state['loss_history']
+        loss_history = LossHistory()
+        loss_history.training_losses = loss_history_data['training_losses']
+        loss_history.validation_losses = loss_history_data['validation_losses']
+
+        return loss_history
+    except FileNotFoundError:
+        print(f"File {filename} not found. Loading a new model and an empty loss history.")
+        return LossHistory()
 
 
 def normalize_x_and_y_labels(sorted_img_tensor_grps):
@@ -227,7 +249,7 @@ def load_dataset_infos(all_parts):
     ds_parts: Dict[str, DatasetPartMetaInfo] = {}
     for part in all_parts:
         # Define the file path for the saved data
-        file_path = f"dataset_infos/{part}_dataset_info.json"
+        file_path = get_file_path(part)
 
         if os.path.exists(file_path):
             print(f"Load the existing DatasetPartMetaInfo from the file {file_path}")
@@ -243,10 +265,20 @@ def load_dataset_infos(all_parts):
                                                                  all_image_groups],
                                                     base_output_path=all_image_groups[0].base_path)
 
-            # Save to JSON
-            with open(file_path, 'w') as file:
-                json.dump(dataset_part_info.dict(), file, indent=4)
+            save_datasetpart_metainfo(dataset_part_info)
 
             ds_parts[part] = dataset_part_info
 
     return ds_parts
+
+
+def save_datasetpart_metainfo(dataset_part_info):
+    file_path = get_file_path(dataset_part_info.part_name)
+
+    with open(file_path, 'w') as file:
+        json.dump(dataset_part_info.dict(), file, indent=4)
+
+
+def get_file_path(part_name: str):
+    file_path = f"dataset_infos/{part_name}_dataset_info.json"
+    return file_path

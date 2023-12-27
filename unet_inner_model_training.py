@@ -1,17 +1,18 @@
 from typing import Dict
 
 import torch
-from torch import optim
+from torch import optim, nn
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from base_model_training import Phase, save_model_and_history, LossHistory
+from base_model_training import Phase, save_model_and_history, LossHistory, DatasetPartMetaInfo, \
+    save_datasetpart_metainfo
 from image_loader import load_input_image_parts, ImageTensorGroup, GroundTruthLabelDataset
 from performance_visualization import ImagePerformance, LabelAndPrediction, update_report_samples_for_epoch, \
     update_report_with_losses
 
 
-def train_model_on_one_batch(batch_part, model, device, super_batch_info):
+def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, device, super_batch_info: str, model_file_name: str):
     sorted_image_groups, image_group_map = load_input_image_parts([batch_part.part_name])
     sorted_image_tensor_groups = []
     image_tensor_group_map: Dict[str, ImageTensorGroup] = {}
@@ -24,7 +25,7 @@ def train_model_on_one_batch(batch_part, model, device, super_batch_info):
         sorted_image_tensor_groups.append(image_tensor_group)
 
     pose_prediction_label_dataset = GroundTruthLabelDataset(sorted_image_tensor_groups)
-    loss_history: LossHistory = batch_part.loss_history
+    loss_history: LossHistory = batch_part.get_loss_history(model_file_name)
 
     train_loader, val_loader, eval_dataloader = batch_part.create_dataloaders(pose_prediction_label_dataset)
 
@@ -74,7 +75,7 @@ def train_model_on_one_batch(batch_part, model, device, super_batch_info):
             loss_history.add_current_running_loss(i, loss.item(), Phase.TRAINING)
 
             dataloader_with_progress.set_description(
-                f"{super_batch_info} - epoch {epoch + 1}/{num_epochs} - Batch {i + 1}/{len(train_loader)} Processing {img_group}, "
+                f"{super_batch_info}-part:{batch_part.part_name}-epoch {epoch + 1}/{num_epochs}-Batch {i + 1}/{len(train_loader)} Processing {img_group}, "
                 f"Loss: {loss.item():.4f}, Avg loss so far: {loss_history.current_running_loss.current_avg_train_loss:.4f}"
             )
 
@@ -108,7 +109,9 @@ def train_model_on_one_batch(batch_part, model, device, super_batch_info):
 
         should_save = loss_history.add_loss(epoch_loss, avg_val_loss)
         if should_save:
-            save_model_and_history(model, loss_history, "unet_model.pth")
-            print(f"Model saved in {super_batch_info} - epoch {epoch}")
+            save_model_and_history(model, loss_history, model_file_name)
+            save_datasetpart_metainfo(batch_part)
+            print(f"\n\nModel saved in {super_batch_info} - epoch {epoch}")
 
-        print(f"\n{super_batch_info} - part: {batch_part.part_name} - epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.6f}, Validation Loss: {avg_val_loss:.6f}")
+        print(f"\n{super_batch_info}-part:{batch_part.part_name}-epoch {epoch + 1}/{num_epochs}, "
+              f"Loss: {epoch_loss:.6f}, Validation Loss: {avg_val_loss:.6f}")

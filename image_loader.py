@@ -20,8 +20,8 @@ class ImageTensorGroup:
         self.transform = transforms.Compose([
             transforms.ToTensor(),
         ])
-        self.shape_mapping = {'laying': [1, 0, 0, 0, 0], 'sitting': [0, 1, 0, 0, 0], 'standing': [0, 0, 1, 0, 0],
-                              'idle': [0, 0, 0, 1, 0], 'no person': [0, 0, 0, 0, 1]}
+        self.shape_mapping = {'laying': [1, 0, 0, 0], 'sitting': [0, 1, 0, 0],
+                              'idle': [0, 0, 1, 0], 'no person': [0, 0, 0, 1]}
 
     def load_images(self):
         self.image_tensors = []
@@ -70,7 +70,7 @@ class ImageTensorGroup:
                     x, y = float(match.group(1)) / x_max_value * 0.68, float(match.group(2)) / y_max_value * 0.68
                     # the picture coordinates do not fill the whole space, whyever that is the case!
                 elif "no person" in line:
-                    x, y = 0.0, 0.0
+                    x, y = -1.1, -1.1
                     shape_encoded = self.shape_mapping.get("no person", None)
                 else:
                     raise ValueError("x,y invalid for file: " + parameter_file)

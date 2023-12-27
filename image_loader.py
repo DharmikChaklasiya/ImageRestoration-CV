@@ -150,7 +150,7 @@ def load_input_image_parts(parts: List[str]) -> Tuple[List[ImageGroup], Dict[str
                         print("Invalid image : "+img_group.base_path)
 
     all_image_groups = sorted(all_image_groups, key=lambda img_group1: int(img_group1.formatted_image_index))
-    print(f"Successfully loaded image-batches - len : {len(all_image_groups)}")
+    print(f"\nSuccessfully loaded image-batches - len : {len(all_image_groups)}")
 
     return all_image_groups, image_group_map
 

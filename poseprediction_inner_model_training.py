@@ -7,7 +7,7 @@ from torch.utils.data import random_split, DataLoader, Subset
 from tqdm import tqdm
 
 from base_model_training import Phase, LossHistory, DatasetPartMetaInfo, save_model_and_history, \
-    save_datasetpart_metainfo
+    save_datasetpart_metainfo, preload_images_from_drive
 from image_loader import load_input_image_parts, ImageTensorGroup, PosePredictionLabelDataset
 from performance_visualization import ImagePerformance, LabelAndPrediction, \
     update_report_samples_for_epoch, update_report_with_losses
@@ -16,15 +16,8 @@ from performance_visualization import ImagePerformance, LabelAndPrediction, \
 def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, device, super_batch_info: str,
                              model_file_name="pose_pred_model.pth"):
     sorted_image_groups, image_group_map = load_input_image_parts([batch_part.part_name])
-    sorted_image_tensor_groups = []
-    image_tensor_group_map: Dict[str, ImageTensorGroup] = {}
-    focal_stack_indices = [0, 1, 2, 3, 7, 10, 15, 20, 25, 30]
 
-    for img_group in tqdm(sorted_image_groups, desc="Preloading images for batches: {}".format(batch_part.part_name)):
-        image_tensor_group = ImageTensorGroup(img_group, focal_stack_indices)
-        image_tensor_group.load_images()
-        image_tensor_group_map[img_group.formatted_image_index] = image_tensor_group
-        sorted_image_tensor_groups.append(image_tensor_group)
+    sorted_image_tensor_groups, image_tensor_group_map = preload_images_from_drive(batch_part, sorted_image_groups, super_batch_info)
 
     pose_prediction_label_dataset = PosePredictionLabelDataset(sorted_image_tensor_groups)
     loss_history: LossHistory = batch_part.get_loss_history(model_file_name)

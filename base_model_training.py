@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from image_group import ImageGroup
-from image_loader import PosePredictionLabelDataset, load_input_image_parts
+from image_loader import PosePredictionLabelDataset, load_input_image_parts, ImageTensorGroup
 
 
 class Phase(Enum):
@@ -282,3 +282,18 @@ def save_datasetpart_metainfo(dataset_part_info):
 def get_file_path(part_name: str):
     file_path = f"dataset_infos/{part_name}_dataset_info.json"
     return file_path
+
+
+def preload_images_from_drive(batch_part, sorted_image_groups, super_batch_info):
+    sorted_image_tensor_groups = []
+    image_tensor_group_map: Dict[str, ImageTensorGroup] = {}
+    focal_stack_indices = [0, 1, 2, 3, 7, 10, 15, 20, 25, 30]
+    sorted_img_groups_with_progress = tqdm(sorted_image_groups, desc="Preloading images for batches")
+    for i, img_group in enumerate(sorted_img_groups_with_progress):
+        image_tensor_group = ImageTensorGroup(img_group, focal_stack_indices)
+        image_tensor_group.load_images()
+        image_tensor_group_map[img_group.formatted_image_index] = image_tensor_group
+        sorted_image_tensor_groups.append(image_tensor_group)
+        sorted_img_groups_with_progress.set_description(
+            f"{super_batch_info}-part:{batch_part.part_name}-Preloading images for batches: {i}/{len(sorted_image_groups)} ")
+    return sorted_image_tensor_groups, image_tensor_group_map

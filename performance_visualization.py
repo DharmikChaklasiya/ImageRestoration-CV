@@ -137,12 +137,6 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
         lbl_and_pred = img_perf.label_and_prediction
         if lbl_and_pred.is_coordinate_prediction():
 
-            if len(img_perf.image_group.filenames) <= 2:
-                raise ValueError("We should have filenames, but haven't for : " + img_perf.image_group.base_path)
-
-            median_image_filename = img_perf.image_group.filenames[
-                len(img_perf.image_group.filenames) // 2]
-
             color_red = (1.0, 0.0, 0.0)  # Red color
             color_green = (0.0, 1.0, 0.0)  # Green color
 
@@ -156,8 +150,8 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
             # updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.label[1], color_green)
             gt_base64 = tensor_to_base64(updated_img)
             img_gt = soup.new_tag('img', src=f"data:image/png;base64,{gt_base64}", width="300")
-            median_image_tag = soup.new_tag('img', src=median_image_filename, width="300")
             epoch_section.append(img_gt)
+            median_image_tag = create_median_focalstack_img_tag(img_perf, soup)
             epoch_section.append(median_image_tag)
 
             label_pred_desc = soup.new_tag('p')
@@ -174,6 +168,8 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
             img_out = soup.new_tag('img', src=f"data:image/png;base64,{out_base64}", width="300")
             epoch_section.append(img_gt)
             epoch_section.append(img_out)
+            median_image_tag = create_median_focalstack_img_tag(img_perf, soup)
+            epoch_section.append(median_image_tag)
 
     samples_info_section.insert(0, epoch_section)
 
@@ -187,6 +183,15 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
 
     if epoch == 1:
         webbrowser.open('file://' + os.path.realpath(html_file_path))
+
+
+def create_median_focalstack_img_tag(img_perf, soup):
+    if len(img_perf.image_group.filenames) <= 2:
+        raise ValueError("We should have filenames, but haven't for : " + img_perf.image_group.base_path)
+    median_image_filename = img_perf.image_group.filenames[
+        len(img_perf.image_group.filenames) // 2]
+    median_image_tag = soup.new_tag('img', src=median_image_filename, width="300")
+    return median_image_tag
 
 
 def rank_performances(performance):

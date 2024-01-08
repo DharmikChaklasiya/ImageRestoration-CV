@@ -22,4 +22,4 @@ def remove_losses_from_json(directory, model_name):
                     json.dump(data, file, indent=4)
 
 
-remove_losses_from_json('dataset_infos', 'pose_pred_model.pth')
+remove_losses_from_json('dataset_infos', 'unet_model.pth')  # pose_pred_model.pth')

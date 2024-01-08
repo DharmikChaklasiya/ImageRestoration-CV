@@ -1,5 +1,4 @@
 import os
-import re
 from typing import List, Dict, Tuple
 
 import torch
@@ -8,6 +7,7 @@ from torchvision import transforms
 from PIL import Image
 
 from image_group import ImageGroup
+from parameter_file_parser import process_content, PersonShape, calculate_bounding_box
 
 
 class ImageTensorGroup:
@@ -20,8 +20,8 @@ class ImageTensorGroup:
         self.transform = transforms.Compose([
             transforms.ToTensor(),
         ])
-        self.shape_mapping = {'laying': [1, 0, 0, 0], 'sitting': [0, 1, 0, 0],
-                              'idle': [0, 0, 1, 0], 'no person': [0, 0, 0, 1]}
+        self.shape_mapping = {PersonShape.LAYING: [1, 0, 0, 0], PersonShape.SITTING: [0, 1, 0, 0],
+                              PersonShape.IDLE: [0, 0, 1, 0], PersonShape.NO_PERSON: [0, 0, 0, 1]}
 
     def load_images(self):
         self.image_tensors = []
@@ -36,10 +36,9 @@ class ImageTensorGroup:
             raise ValueError(f"Error while loading image from: {self.image_group.ground_truth_file}") from e
         self.ground_truth_tensor = self.transform(opened_image)
 
-        with open(self.image_group.parameter_file, 'r') as file:
-            shape_encoded, x, y = self.parse_param_file(self.image_group.parameter_file, file.readlines())
+        shape_encoded, x_min, x_max, y_min, y_max = self.parse_param_file(self.image_group.parameter_file)
 
-        self.pose_prediction_labels = torch.tensor([x, y])  # torch.tensor(shape_encoded + [x, y]) we start slowly -
+        self.pose_prediction_labels = torch.tensor([x_min, x_max, y_min, y_max])  # torch.tensor(shape_encoded + [x, y]) we start slowly -
         # predicting everything sadly doesn't work at all
 
     def get_images(self):
@@ -50,43 +49,18 @@ class ImageTensorGroup:
         stacked_images = self.images_to_tensors(self.image_tensors, self.image_group.formatted_image_index)
         return stacked_images, self.pose_prediction_labels, self.image_group.formatted_image_index
 
-    def parse_param_file(self, parameter_file, lines):
-        shape_encoded, x, y = self.process_content(lines, parameter_file)
-        assert x is not None, "No person pose x found in : " + parameter_file
-        assert y is not None, "No person pose y found in : " + parameter_file
-        if not shape_encoded:
-            self.process_content(lines, parameter_file)
-            raise ValueError("No valid person shape found in : " + parameter_file)
-        return shape_encoded, x, y
+    def parse_param_file(self, parameter_file):
+        shape_encoded, x, y, rotz = process_content(parameter_file)
 
-    def process_content(self, lines, parameter_file, x_max_value=10.0, y_max_value=10.0):
-        x, y = None, None
-        shape_encoded = None
-        for line in lines:
-            if line.startswith("person pose"):
-                match = re.search(r'person pose \(x,y,z,rot x, rot y, rot z\) =\s*([-\d.]+)\s+([-\d.]+)', line)
+        x_min, y_min, x_max, y_max = calculate_bounding_box(shape_encoded, x, y, rotz)
 
-                if match:
-                    x, y = float(match.group(1)) / x_max_value * 0.68, float(match.group(2)) / y_max_value * 0.68
-                    # the picture coordinates do not fill the whole space, whyever that is the case!
-                elif "no person" in line:
-                    x, y = -1.1, -1.1
-                    shape_encoded = self.shape_mapping.get("no person", None)
-                else:
-                    raise ValueError("x,y invalid for file: " + parameter_file)
+        try:
+            shape_encoded = self.shape_mapping[shape_encoded]
+        except KeyError as e:
+            raise ValueError(
+                f"Shape encoding '{shape_encoded}' not found in shape mapping for file: {parameter_file}") from e
 
-            if line.startswith("person shape"):
-                shape_match = re.search(r'person shape =\s*(\w+)', line)
-
-                if shape_match:
-                    shape = shape_match.group(1)
-                    shape_encoded = self.shape_mapping.get(shape, None)
-                else:
-                    raise ValueError("Invalid person shape in file: " + parameter_file)
-
-                if not shape_encoded:
-                    raise ValueError("Invalid person shape in file: " + parameter_file + ", value : " + shape)
-        return shape_encoded, x, y
+        return shape_encoded, x_min, y_min, x_max, y_max
 
     def images_to_tensors(self, image_tensors, image_index):
         stacked_images = torch.cat(image_tensors, dim=0)  # Shape: (focal_stack_indices, 512, 512)
@@ -147,11 +121,9 @@ def load_input_image_parts(parts: List[str]) -> Tuple[List[ImageGroup], Dict[str
                         all_image_groups.append(img_group)
                         image_group_map[img_group.formatted_image_index] = img_group
                     else:
-                        print("Invalid image : "+img_group.base_path)
+                        print("Invalid image : " + img_group.base_path)
 
     all_image_groups = sorted(all_image_groups, key=lambda img_group1: int(img_group1.formatted_image_index))
-    print(f"\nSuccessfully loaded image-batches - len : {len(all_image_groups)}")
 
     return all_image_groups, image_group_map
-
 

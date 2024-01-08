@@ -1,14 +1,10 @@
-import random
-from typing import Dict
-
 import torch
 from torch import optim, nn
-from torch.utils.data import random_split, DataLoader, Subset
 from tqdm import tqdm
 
 from base_model_training import Phase, LossHistory, DatasetPartMetaInfo, save_model_and_history, \
     save_datasetpart_metainfo, preload_images_from_drive
-from image_loader import load_input_image_parts, ImageTensorGroup, PosePredictionLabelDataset
+from image_loader import load_input_image_parts, PosePredictionLabelDataset
 from performance_visualization import ImagePerformance, LabelAndPrediction, \
     update_report_samples_for_epoch, update_report_with_losses
 
@@ -17,7 +13,8 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
                              model_file_name="pose_pred_model.pth"):
     sorted_image_groups, image_group_map = load_input_image_parts([batch_part.part_name])
 
-    sorted_image_tensor_groups, image_tensor_group_map = preload_images_from_drive(batch_part, sorted_image_groups, super_batch_info)
+    sorted_image_tensor_groups, image_tensor_group_map = preload_images_from_drive(batch_part, sorted_image_groups,
+                                                                                   super_batch_info)
 
     pose_prediction_label_dataset = PosePredictionLabelDataset(sorted_image_tensor_groups)
     loss_history: LossHistory = batch_part.get_loss_history(model_file_name)
@@ -89,7 +86,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
                 f"{super_batch_info}-part:{batch_part.part_name}-epoch {epoch + 1}/{num_epochs}-Batch {i + 1}/{len(train_loader)} Processing {img_group_index}, Loss: {current_loss:.4f}, Avg loss so far: {loss_history.current_running_loss.current_avg_train_loss:.4f}"
             )
 
-            if i % 20 == 0 or i == len(train_loader) - 1:
+            if i > 0 and (i % 20 == 0 or i == len(train_loader) - 1):
                 update_report_with_losses(epoch + 1, loss_history, html_file_path)
 
         epoch_loss = loss_history.current_running_loss.running_loss / len(train_loader)

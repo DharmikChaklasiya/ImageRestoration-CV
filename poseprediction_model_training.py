@@ -18,7 +18,7 @@ else:
 all_parts = ["Part1", "Part1 2", "Part1 3", "Part2", "Part2 2", "Part2 3"]
 
 model = PosePredictionModel(encoder=UNetEncoder(in_channels=10, input_width=512, input_height=512),
-                            fcconfig=FCConfig(512, 128, 2)).to(device)
+                            fcconfig=FCConfig(512, 128, 4)).to(device)
 
 dataset_parts = load_dataset_infos(all_parts)
 

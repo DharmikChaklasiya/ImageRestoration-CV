@@ -134,7 +134,8 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
 
         epoch_section.append(description)
 
-        if img_perf.label_and_prediction.is_coordinate_prediction():
+        lbl_and_pred = img_perf.label_and_prediction
+        if lbl_and_pred.is_coordinate_prediction():
 
             if len(img_perf.image_group.filenames) <= 2:
                 raise ValueError("We should have filenames, but haven't for : " + img_perf.image_group.base_path)
@@ -145,10 +146,14 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
             color_red = (1.0, 0.0, 0.0)  # Red color
             color_green = (0.0, 1.0, 0.0)  # Green color
 
-            updated_img = add_horizontal_line(convert_to_rgb(img_perf.ground_truth), img_perf.label_and_prediction.prediction[0], color_red)
-            updated_img = add_horizontal_line(updated_img, img_perf.label_and_prediction.label[0], color_green)
-            updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.prediction[1], color_red)
-            updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.label[1], color_green)
+            updated_img = add_rectangle(convert_to_rgb(img_perf.ground_truth), lbl_and_pred.label, color_green)
+            updated_img = add_rectangle(updated_img, lbl_and_pred.prediction, color_red)
+
+            # updated_img = add_horizontal_line(convert_to_rgb(img_perf.ground_truth),
+            #                                   img_perf.label_and_prediction.prediction[0], color_red)
+            # updated_img = add_horizontal_line(updated_img, img_perf.label_and_prediction.label[0], color_green)
+            # updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.prediction[1], color_red)
+            # updated_img = add_vertical_line(updated_img, img_perf.label_and_prediction.label[1], color_green)
             gt_base64 = tensor_to_base64(updated_img)
             img_gt = soup.new_tag('img', src=f"data:image/png;base64,{gt_base64}", width="300")
             median_image_tag = soup.new_tag('img', src=median_image_filename, width="300")
@@ -157,14 +162,14 @@ def update_report_samples_for_epoch(epoch: int, performance: List[ImagePerforman
 
             label_pred_desc = soup.new_tag('p')
             label_pred_desc.string = (
-                f'Label (x,y) : ({img_perf.label_and_prediction.label[0]:.3f}, {img_perf.label_and_prediction.label[1]:.3f})'
-                f'Prediction (x,y) : ({img_perf.label_and_prediction.prediction[0]:.3f}, {img_perf.label_and_prediction.prediction[1]:.3f})'
+                f'Label (x_min, y_min, x_max, y_max) : ({lbl_and_pred.label[0]},{lbl_and_pred.label[1]},{lbl_and_pred.label[2]},{lbl_and_pred.label[3]}), '
+                f'Prediction (x_min, y_min, x_max, y_max) : ({lbl_and_pred.prediction[0]},{lbl_and_pred.prediction[1]},{lbl_and_pred.prediction[2]},{lbl_and_pred.prediction[3]})'
             )
             epoch_section.append(label_pred_desc)
         else:
             # Convert tensors to Base64 and append images
-            gt_base64 = tensor_to_base64(img_perf.label_and_prediction.label)
-            out_base64 = tensor_to_base64(img_perf.label_and_prediction.prediction)
+            gt_base64 = tensor_to_base64(lbl_and_pred.label)
+            out_base64 = tensor_to_base64(lbl_and_pred.prediction)
             img_gt = soup.new_tag('img', src=f"data:image/png;base64,{gt_base64}", width="300")
             img_out = soup.new_tag('img', src=f"data:image/png;base64,{out_base64}", width="300")
             epoch_section.append(img_gt)
@@ -253,6 +258,51 @@ def add_horizontal_line(image_tensor_in: torch.Tensor, x_position, color):
 
     for i, c in enumerate(color):
         image_tensor[i, pixel_x, :] = c
+
+    return image_tensor
+
+
+def add_rectangle(image_tensor_in, rect_coords, color):
+    image_tensor = image_tensor_in.clone()
+    C, H, W = image_tensor.shape
+    # Normalize coordinates to pixel coordinates
+    x_min = int(rect_coords[0])#int((rect_coords[0] + 1) * W / 2)
+    y_min = int(rect_coords[1])#int((rect_coords[1] + 1) * H / 2)
+    x_max = int(rect_coords[2])#int((rect_coords[2] + 1) * W / 2)
+    y_max = int(rect_coords[3])#int((rect_coords[3] + 1) * H / 2)
+
+    if x_min < 0:
+        x_min = 0
+    if x_min >= W:
+        x_min = W-1
+    if y_min < 0:
+        y_min = 0
+    if y_min >= H:
+        y_min = H-1
+    if x_max >= W:
+        x_max = W-1
+    if x_max < 0:
+        x_max = 0
+    if y_max >= H:
+        y_max = H-1
+    if x_max < 0:
+        x_max = 0
+
+
+    try:
+        # Draw horizontal lines (top and bottom of the rectangle)
+        for x in range(x_min, x_max):
+            for i, c in enumerate(color):
+                image_tensor[i, y_min, x] = c
+                image_tensor[i, y_max, x] = c
+
+        # Draw vertical lines (left and right of the rectangle)
+        for y in range(y_min, y_max):
+            for i, c in enumerate(color):
+                image_tensor[i, y, x_min] = c
+                image_tensor[i, y, x_max] = c
+    except Exception as e:
+        raise ValueError(f"Error while drawing rectangle (left, top, right, bottom): ({x_min}, {y_min}, {x_max}, {y_max})") from e
 
     return image_tensor
 

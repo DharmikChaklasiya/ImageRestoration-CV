@@ -70,7 +70,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
                 f"Loss: {loss.item():.4f}, Avg loss so far: {loss_history.current_running_loss.current_avg_train_loss:.4f}"
             )
 
-            if i % 20 == 0 or i == len(train_loader) - 1:
+            if i > 0 and (i % 20 == 0 or i == len(train_loader) - 1):
                 update_report_with_losses(epoch + 1, loss_history, html_file_path)
 
         # Print average loss for the epoch

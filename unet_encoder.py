@@ -2,14 +2,15 @@ import torch.nn as nn
 
 
 class UNetEncoder(nn.Module):
-    def __init__(self, in_channels, input_height, input_width, out_channels_sequence=None, pool_kernel_size=2, pool_stride=2):
+    def __init__(self, in_channels, input_height, input_width, out_channels_sequence=None, pool_kernel_size=2,
+                 pool_stride=2):
         super(UNetEncoder, self).__init__()
         self.in_channels = in_channels
         self.input_width = input_width
         self.input_height = input_height
         self.pool_stride = pool_stride
         self.pool_kernel_size = pool_kernel_size
-        self.out_channels_sequence = [16, 32, 64, 128, 256] if out_channels_sequence is None else out_channels_sequence
+        self.out_channels_sequence = [32, 64, 128, 256, 512] if out_channels_sequence is None else out_channels_sequence
 
         self.enc_conv0 = self.contract_block(in_channels, self.out_channels_sequence[0])
         self.enc_conv1 = self.contract_block(self.out_channels_sequence[0], self.out_channels_sequence[1])
@@ -19,7 +20,7 @@ class UNetEncoder(nn.Module):
         self.downsampling_factor = self.calculate_downsampling_factor()
 
     def calculate_downsampling_factor(self):
-        # Assuming each contracting block has a max pooling layer that downsamples the image
+        # each contracting block has a max pooling layer that downsamples the image
         return self.pool_stride ** len(self.out_channels_sequence)
 
     def contract_block(self, in_channels, out_channels, kernel_size=3):

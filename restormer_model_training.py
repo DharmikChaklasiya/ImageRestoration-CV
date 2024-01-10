@@ -1,9 +1,20 @@
+# Import necessary libraries
+
 import torch
+from pytorch_msssim import SSIM
 
 from base_model_training import load_dataset_infos, load_model_and_history
-from models.poseprediction_architecture import PosePredictionModel, FCConfig
-from poseprediction_inner_model_training import train_model_on_one_batch
-from models.unet_encoder import UNetEncoder
+from models.restormer import Restormer
+from restormer_inner_model_training import train_model_on_one_batch
+
+ssim_loss = SSIM(data_range=1.0, size_average=True, channel=3)
+
+
+def ssim_based_loss(output, target):
+    # Calculate SSIM loss
+    loss = 1 - ssim_loss(output, target)  # 1 - SSIM since we want to minimize the loss
+    return loss
+
 
 print(f"Using pytorch version: {torch.__version__}")
 print(f"Using pytorch cuda version: {torch.version.cuda}")
@@ -17,14 +28,13 @@ else:
 
 all_parts = ["Part1", "Part1 2", "Part1 3", "Part2", "Part2 2", "Part2 3"]
 
-model = PosePredictionModel(encoder=UNetEncoder(in_channels=10, input_width=512, input_height=512),
-                            fcconfig=FCConfig(512, 128, 4)).to(device)
+model = Restormer().to(device)
 
 dataset_parts = load_dataset_infos(all_parts)
 
 num_super_batches = 10
 
-model_file_name = "pose_pred_model.pth"
+model_file_name = "restormer_model.pth"
 
 load_model_and_history(model, model_file_name)
 

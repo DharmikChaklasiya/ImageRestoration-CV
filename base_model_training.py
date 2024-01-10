@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from image_group import ImageGroup
-from image_loader import PosePredictionLabelDataset, load_input_image_parts, ImageTensorGroup
+from image_loader import PosePredictionLabelDataset, ImageTensorGroup
 
 
 class Phase(Enum):
@@ -184,14 +184,36 @@ class DatasetPartMetaInfo(BaseModel):
         eval_subset = Subset(dataset, num_eval_indices)
 
         # Create DataLoaders
-        train_loader = DataLoader(train_subset, batch_size=4, shuffle=True)
-        val_loader = DataLoader(val_subset, batch_size=4, shuffle=False)
-        eval_loader = DataLoader(eval_subset, batch_size=1, shuffle=False)
+        train_loader = DataLoader(train_subset, batch_size=train_batch_size, shuffle=True)
+        val_loader = DataLoader(val_subset, batch_size=val_batch_size, shuffle=False)
+        eval_loader = DataLoader(eval_subset, batch_size=eval_batch_size, shuffle=False)
 
         return train_loader, val_loader, eval_loader
 
     def get_loss_history(self, model_file_name):
         return self.loss_histories.setdefault(model_file_name, LossHistory())
+
+    def limit_dataset_size(self, n: int):
+        """
+        Limit the dataset to the first n elements while respecting the train/validation split.
+        """
+        assert n > 0, "n must be greater than 0"
+        assert n <= len(self.all_indices), "n is greater than the size of the dataset"
+
+        # Calculate the number of training and validation samples based on the split ratio
+        val_size = int(n * self.val_ratio)
+        train_size = n - val_size
+
+        # Adjust train_indices, val_indices, and all_indices
+        self.train_indices = self.train_indices[:train_size]
+        self.val_indices = self.val_indices[:val_size]
+        self.all_indices = self.train_indices + self.val_indices
+
+        # Adjust eval_indices
+        if len(self.val_indices) < self.num_samples_for_eval:
+            self.eval_indices = self.val_indices.copy()
+        else:
+            self.eval_indices = random.sample(self.val_indices, self.num_samples_for_eval)
 
 
 def save_model_and_history(model, loss_history, filename):
@@ -221,6 +243,18 @@ def load_model_and_history(model, filename):
     except FileNotFoundError:
         print(f"File {filename} not found. Loading a new model and an empty loss history.")
         return LossHistory()
+
+
+def load_model(model, filename):
+    try:
+        state = torch.load(filename)
+        model.load_state_dict(state['model_state_dict'])
+
+        print(f"\nLoaded model from file {filename}.")
+
+    except FileNotFoundError as e:
+        raise ValueError(
+            f"File {filename} not found, but we need to have a pretrained model for the integration.") from e
 
 
 def normalize_x_and_y_labels(sorted_img_tensor_grps):
@@ -259,7 +293,7 @@ def load_dataset_infos(all_parts):
                 ds_parts[part] = dataset_part_info
         else:
             print(f"Create new DatasetPartMetaInfo and save it to file {file_path}")
-            all_image_groups, image_group_map = load_input_image_parts([part])
+            all_image_groups, image_group_map = load_input_image_parts(part)
             dataset_part_info = DatasetPartMetaInfo(part_name=part,
                                                     all_indices=[img_group.formatted_image_index for img_group in
                                                                  all_image_groups],
@@ -284,16 +318,69 @@ def get_file_path(part_name: str):
     return file_path
 
 
-def preload_images_from_drive(batch_part, sorted_image_groups, super_batch_info):
+def preload_images_from_drive(batch_part: DatasetPartMetaInfo, sorted_image_groups: List[ImageGroup], super_batch_info,
+                              focal_stack_indices: List[int] = None) -> (List[ImageTensorGroup], Dict[str, ImageTensorGroup]):
     sorted_image_tensor_groups = []
     image_tensor_group_map: Dict[str, ImageTensorGroup] = {}
-    focal_stack_indices = [0, 1, 2, 3, 7, 10, 15, 20, 25, 30]
+    focal_stack_indices: List[int] = \
+        [0, 1, 2, 3, 7, 10, 15, 20, 25, 30] if focal_stack_indices is None else focal_stack_indices
+
     sorted_img_groups_with_progress = tqdm(sorted_image_groups, desc="Preloading images for batches")
+    filtered_image_groups = []
+
+    batch_part_all_indices = set(batch_part.all_indices)
+
     for i, img_group in enumerate(sorted_img_groups_with_progress):
-        image_tensor_group = ImageTensorGroup(img_group, focal_stack_indices)
-        image_tensor_group.load_images()
-        image_tensor_group_map[img_group.formatted_image_index] = image_tensor_group
-        sorted_image_tensor_groups.append(image_tensor_group)
+        if img_group.formatted_image_index in batch_part_all_indices:
+            image_tensor_group = ImageTensorGroup(img_group, focal_stack_indices)
+            image_tensor_group.load_images()
+            image_tensor_group_map[img_group.formatted_image_index] = image_tensor_group
+            sorted_image_tensor_groups.append(image_tensor_group)
+        else:
+            filtered_image_groups.append(img_group)
+
         sorted_img_groups_with_progress.set_description(
             f"{super_batch_info}-part:{batch_part.part_name}-Preloading images for batches: {i}/{len(sorted_image_groups)} ")
+
+    if len(filtered_image_groups) > 0:
+        print(f"\nWe filtered image groups, because they were on the drive, "
+              f"but not in the batch definition, amount : {len(filtered_image_groups)}")
+
     return sorted_image_tensor_groups, image_tensor_group_map
+
+
+def load_input_image_parts(part: DatasetPartMetaInfo) -> Tuple[List[ImageGroup], Dict[str, ImageGroup]]:
+    all_image_groups: List[ImageGroup] = []
+    image_group_map: Dict[str, ImageGroup] = {}
+
+    root_dir = os.path.abspath(os.path.join(os.getcwd(), "..", "..", "computervision", "integrals"))
+
+    print(f"Will load parts: {part.part_name} data from root dir: {root_dir}")
+
+    for root, dirs, files in os.walk(root_dir):
+        for dir_name in dirs:
+            if dir_name == part.part_name:
+                sub_folder_path = os.path.join(root, dir_name)
+
+                all_indices = set(part.all_indices)
+
+                filtered_indices = []
+
+                for formatted_image_index in os.listdir(sub_folder_path):
+                    if formatted_image_index in all_indices:
+                        img_group = ImageGroup(formatted_image_index=formatted_image_index)
+                        img_group.initialize_output_only(sub_folder_path, True)
+                        if img_group.valid:
+                            all_image_groups.append(img_group)
+                            image_group_map[img_group.formatted_image_index] = img_group
+                        else:
+                            print("Invalid image : " + img_group.base_path)
+                    else:
+                        filtered_indices.append(formatted_image_index)
+
+                if len(filtered_indices) > 0:
+                    print(f"\nFiltered out indices because they are not part of the current batch definition, amount : {len(filtered_indices)}")
+
+    all_image_groups = sorted(all_image_groups, key=lambda img_group1: int(img_group1.formatted_image_index))
+
+    return all_image_groups, image_group_map

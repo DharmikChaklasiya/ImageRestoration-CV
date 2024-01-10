@@ -28,7 +28,7 @@ class UNetDecoder(nn.Module):
         )
         return block
 
-    def forward(self, x, encoder_features):
+    def forward(self, encoder_features):
         d = encoder_features[4]
 
         d4 = self.dec_conv4(d)

@@ -266,33 +266,32 @@ def add_horizontal_line(image_tensor_in: torch.Tensor, x_position, color):
 
     return image_tensor
 
+def correct_bounding_box(rect_coords, image_width, image_height):
+    """
+    Corrects the bounding box coordinates to ensure they are within the image boundaries.
+
+    :param rect_coords: List or tuple of bounding box coordinates in the format [x_min, y_min, x_max, y_max].
+    :param image_width: Width of the image.
+    :param image_height: Height of the image.
+    :return: Corrected coordinates as a tuple (x_min, y_min, x_max, y_max).
+    """
+
+    x_min, y_min, x_max, y_max = map(int, rect_coords)  # Convert to integers
+
+    # Correct the coordinates to be within the image boundaries
+    x_min = max(0, min(x_min, image_width - 1))
+    y_min = max(0, min(y_min, image_height - 1))
+    x_max = max(0, min(x_max, image_width - 1))
+    y_max = max(0, min(y_max, image_height - 1))
+
+    return x_min, y_min, x_max, y_max
+
 
 def add_rectangle(image_tensor_in, rect_coords, color):
     image_tensor = image_tensor_in.clone()
     C, H, W = image_tensor.shape
-    # Normalize coordinates to pixel coordinates
-    x_min = int(rect_coords[0])#int((rect_coords[0] + 1) * W / 2)
-    y_min = int(rect_coords[1])#int((rect_coords[1] + 1) * H / 2)
-    x_max = int(rect_coords[2])#int((rect_coords[2] + 1) * W / 2)
-    y_max = int(rect_coords[3])#int((rect_coords[3] + 1) * H / 2)
 
-    if x_min < 0:
-        x_min = 0
-    if x_min >= W:
-        x_min = W-1
-    if y_min < 0:
-        y_min = 0
-    if y_min >= H:
-        y_min = H-1
-    if x_max >= W:
-        x_max = W-1
-    if x_max < 0:
-        x_max = 0
-    if y_max >= H:
-        y_max = H-1
-    if x_max < 0:
-        x_max = 0
-
+    x_min, y_min, x_max, y_max = correct_bounding_box(rect_coords, W, H)
 
     try:
         # Draw horizontal lines (top and bottom of the rectangle)

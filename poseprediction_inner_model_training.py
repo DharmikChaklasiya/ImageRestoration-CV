@@ -3,15 +3,15 @@ from torch import optim, nn
 from tqdm import tqdm
 
 from base_model_training import Phase, LossHistory, DatasetPartMetaInfo, save_model_and_history, \
-    save_datasetpart_metainfo, preload_images_from_drive
-from image_loader import load_input_image_parts, PosePredictionLabelDataset
+    save_datasetpart_metainfo, preload_images_from_drive, load_input_image_parts
+from image_loader import PosePredictionLabelDataset
 from performance_visualization import ImagePerformance, LabelAndPrediction, \
     update_report_samples_for_epoch, update_report_with_losses
 
 
 def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, device, super_batch_info: str,
                              model_file_name="pose_pred_model.pth"):
-    sorted_image_groups, image_group_map = load_input_image_parts([batch_part.part_name])
+    sorted_image_groups, image_group_map = load_input_image_parts(batch_part)
 
     sorted_image_tensor_groups, image_tensor_group_map = preload_images_from_drive(batch_part, sorted_image_groups,
                                                                                    super_batch_info)
@@ -41,15 +41,14 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
                 eval_inputs, pose_prediction_labels_eval = eval_inputs.to(device), pose_prediction_labels_eval.to(
                     device)
                 eval_outputs = evaluated_model(eval_inputs)
+                eval_loss = loss_function(eval_outputs, pose_prediction_labels_eval)
 
-                for pose_pred_label, out in zip(pose_prediction_labels_eval, eval_outputs):
-                    eval_loss = loss_function(out, pose_pred_label)
-                    first_img_group_index = img_group_indices[0]
-                    gt = image_tensor_group_map[first_img_group_index].ground_truth_tensor
+                for pose_pred_label, out, img_group_index in zip(pose_prediction_labels_eval, eval_outputs, img_group_indices):
+                    gt = image_tensor_group_map[img_group_index].ground_truth_tensor
                     performance.append(
                         ImagePerformance(eval_loss.item(), gt,
                                          LabelAndPrediction(pose_pred_label, out),
-                                         image_group_map[first_img_group_index]))
+                                         image_group_map[img_group_index]))
 
         update_report_samples_for_epoch(epoch + 1, performance, html_file_path)
 

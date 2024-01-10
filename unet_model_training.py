@@ -3,7 +3,7 @@
 import torch
 
 from base_model_training import load_dataset_infos, load_model_and_history
-from unet_architecture import UNet
+from models.unet_architecture import UNet
 
 from pytorch_msssim import SSIM
 

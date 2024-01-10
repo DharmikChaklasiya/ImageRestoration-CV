@@ -88,10 +88,17 @@ def calculate_bounding_box(person_shape: PersonShape, x, y, rotz, image_size=512
     person_offset_y = person_shape.offset_y * image_size
 
     # Calculate the coordinates of the bounding box
-    left = max(person_center_x - person_width / 2 + person_offset_x, 0)
-    right = min(person_center_x + person_width / 2 + person_offset_x, image_size)
-    top = max(person_center_y - person_height / 2 + person_offset_y, 0)
-    bottom = min(person_center_y + person_height / 2 + person_offset_y, image_size)
+    left = int(max(person_center_x - person_width / 2 + person_offset_x, 0))
+    right = int(min(person_center_x + person_width / 2 + person_offset_x, image_size))
+    top = int(max(person_center_y - person_height / 2 + person_offset_y, 0))
+    bottom = int(min(person_center_y + person_height / 2 + person_offset_y, image_size))
+
+    assert left >= 0, "x_min : {} must be greater 0".format(left)
+    assert top >= 0, "y_min : {} must be greater 0".format(top)
+    assert left < right, "x_min : {} must be smaller than x_max : {}".format(left, right)
+    assert top < bottom, "y_min : {} must be smaller than y_max : {}".format(top, bottom)
+    assert right < image_size, "x_max : {} must be smaller {}".format(right, image_size)
+    assert bottom < image_size, "y_max : {} must be smaller {}".format(bottom, image_size)
 
     return left, top, right, bottom
 
@@ -110,6 +117,21 @@ def process_content(parameter_file, x_max_value=10.0, y_max_value=10.0):
     with open(parameter_file, 'r') as file:
         lines = file.readlines()
 
+    rotz, shape_encoded, x, y = process_content_lines(lines, parameter_file)
+
+    #epsilon = 1e-3
+    #expected_person_shape = PersonShape.NO_PERSON
+    #if shape_encoded == expected_person_shape:
+    #    print(expected_person_shape.value + " person with interesting coords: " + parameter_file)
+
+    assert x is not None, "No person pose x found in : " + parameter_file
+    assert y is not None, "No person pose y found in : " + parameter_file
+    if not shape_encoded:
+        raise ValueError("No valid person shape found in : " + parameter_file)
+    return shape_encoded, x, y, rotz
+
+
+def process_content_lines(lines, parameter_file):
     x, y, z, rotx, roty, rotz = None, None, None, None, None, None
     shape_encoded: PersonShape = None
     for line in lines:
@@ -143,14 +165,4 @@ def process_content(parameter_file, x_max_value=10.0, y_max_value=10.0):
 
             if not shape_encoded:
                 raise ValueError("Invalid person shape in file: " + parameter_file + ", line : " + line)
-
-    #epsilon = 1e-3
-    #expected_person_shape = PersonShape.NO_PERSON
-    #if shape_encoded == expected_person_shape:
-    #    print(expected_person_shape.value + " person with interesting coords: " + parameter_file)
-
-    assert x is not None, "No person pose x found in : " + parameter_file
-    assert y is not None, "No person pose y found in : " + parameter_file
-    if not shape_encoded:
-        raise ValueError("No valid person shape found in : " + parameter_file)
-    return shape_encoded, x, y, rotz
+    return rotz, shape_encoded, x, y

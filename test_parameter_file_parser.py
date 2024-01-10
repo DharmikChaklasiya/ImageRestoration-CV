@@ -4,12 +4,14 @@ from unittest import TestCase
 from PIL import Image
 from matplotlib import pyplot as plt, patches
 
-from parameter_file_parser import process_content, calculate_bounding_box, calculate_adjusted_person_size
+from parameter_file_parser import process_content, calculate_bounding_box, calculate_adjusted_person_size, \
+    process_content_lines, PersonShape
+
 
 class Test(TestCase):
     def test_calculate_bounding_box(self):
         base_path = "C:\\Users\\marti\\Documents\\computervision\\integrals\\Part1\\"
-        formatted_image_index = "003186"  #000790 003186 004748 004921 idle samples no rotation
+        formatted_image_index = "003186"  # 000790 003186 004748 004921 idle samples no rotation
         formatted_image_index = "002509"  # 000503 002509 sitting samples no rotation
         formatted_image_index = "003029"  # 003029 laying samples no rotation
         formatted_image_index = "001042"  # 000214 000333 000361 000566 001015 001019 001042 diagonal idle samples
@@ -55,9 +57,18 @@ class Test(TestCase):
         self.assertAlmostEqual(1.0, adjusted_width)
         self.assertAlmostEqual(2.0, adjusted_height)
 
-        adjusted_width, adjusted_height = calculate_adjusted_person_size(1.0, 2.0, math.pi/2)
+        adjusted_width, adjusted_height = calculate_adjusted_person_size(1.0, 2.0, math.pi / 2)
         self.assertAlmostEqual(2.0, adjusted_width)
         self.assertAlmostEqual(1.0, adjusted_height)
+
+    def test_process_content_lines(self):
+        rotz, shape_encoded, x, y = process_content_lines(["person pose (x,y,z,rot x, rot y, rot z) =  -1 -3 0 0 0 1.02974",
+                               "person shape =  sitting"], 'test.txt')
+
+        self.assertEquals(PersonShape.SITTING, shape_encoded)
+        self.assertEquals(x, -1)
+        self.assertEquals(y, -3)
+        self.assertAlmostEqual(rotz, 1.02974)
 
     def test_process_content(self):
         self.fail()

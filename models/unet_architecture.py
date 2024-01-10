@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 
 from unet_decoder import UNetDecoder
@@ -23,7 +22,7 @@ class UNet(nn.Module):
         encoder_features = self.encoder(x)
 
         # Expansive Path (Decoder)
-        out = self.decoder(encoder_features, encoder_features)
+        out = self.decoder(encoder_features)
 
         # Assert the final output dimensions
         assert out.shape == (x.shape[0], self.out_channels, self.input_height, self.input_width), \

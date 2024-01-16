@@ -8,14 +8,14 @@ import cv2
 import numpy as np
 
 
-base_path = "C:\\Users\\Ramona\\Documents\\Studium\\WS2023\\UE_CV\\test_images\\"
+base_path = "..\\test_images\\"
 # Define a torchvision transform to convert PIL image to PyTorch tensor
 # transform = transforms.ToTensor()
 
 transform = transforms.Compose([
             transforms.ToTensor() # ,  transforms.Normalize(mean=[0.5], std=[0.5]),
         ])
-eps = 5e-02
+eps = 7e-02
 
         
 from loss_utils import ssim_value, psnr_value

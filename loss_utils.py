@@ -1,20 +1,18 @@
 import torch
 from torch.nn import functional as F
 from pytorch_msssim import SSIM
-from torchmetrics.image import PeakSignalNoiseRatio
-
-# avoid negative results
-ssim_loss = SSIM(data_range=1.0, nonnegative_ssim=True)
-# psnr_loss = PeakSignalNoiseRatio(data_range=1.0)
+import math
+import cv2
+import numpy as np
 
 
-def psnr_based_loss(output, target):
-    mse = F.mse_loss(output, target) # L2 loss - mean squared error
-    loss = 10 * torch.log10(1.0/mse)
-    return torch.mean(loss).item()
-    #return psnr_loss(output, target).item()
+# in oder to avoid negative results
+ssim_norm = SSIM(data_range=1., nonnegative_ssim=True)
 
-def ssim_based_loss(output, target):
-    # Calculate SSIM loss
-    loss = 1 - ssim_loss(output, target)  # 1 - SSIM since we want to minimize the loss
-    return loss
+
+def psnr_value(output, target):    
+        return cv2.PSNR(np.float32(output), np.float32(target)) # R = 255. default
+
+def ssim_value(output, target):
+        return  ssim_norm(output, target)
+

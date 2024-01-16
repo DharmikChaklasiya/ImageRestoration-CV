@@ -9,11 +9,10 @@ import numpy as np
 
 
 base_path = "..\\test_images\\"
-# Define a torchvision transform to convert PIL image to PyTorch tensor
-# transform = transforms.ToTensor()
+
 
 transform = transforms.Compose([
-            transforms.ToTensor() # ,  transforms.Normalize(mean=[0.5], std=[0.5]),
+            transforms.ToTensor() 
         ])
 eps = 7e-02
 

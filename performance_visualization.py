@@ -43,6 +43,10 @@ class ImagePerformance:
         return self.rank + " " + self.image_group.formatted_image_index
 
 
+def update_report_with_sample_training_images(epoch, inputs, ground_truths, newbbxes, img_tensor_groups, html_file_path):
+    pass
+
+
 def update_report_with_losses(epoch, loss_history: LossHistory, html_file_path):
     soup = create_or_get_html_file(html_file_path)
 
@@ -93,7 +97,7 @@ def create_or_get_html_file(html_file_path):
             '               <h1>Model training run information</h1>'
             '               <h2>Loss information</h2>'
             '               <div id="loss-info"></div>'
-            '               <h2>Training Output Images</h2>'
+            '               <h2>Validation Output Images (3 best, 3 median, 3 worst)</h2>'
             '               <div id="samples-info"></div>'
             '           </body>'
             '       </html>',
@@ -266,6 +270,7 @@ def add_horizontal_line(image_tensor_in: torch.Tensor, x_position, color):
 
     return image_tensor
 
+
 def correct_bounding_box(rect_coords, image_width, image_height):
     """
     Corrects the bounding box coordinates to ensure they are within the image boundaries.
@@ -306,7 +311,8 @@ def add_rectangle(image_tensor_in, rect_coords, color):
                 image_tensor[i, y, x_min] = c
                 image_tensor[i, y, x_max] = c
     except Exception as e:
-        raise ValueError(f"Error while drawing rectangle (left, top, right, bottom): ({x_min}, {y_min}, {x_max}, {y_max})") from e
+        raise ValueError(
+            f"Error while drawing rectangle (left, top, right, bottom): ({x_min}, {y_min}, {x_max}, {y_max})") from e
 
     return image_tensor
 

@@ -2,6 +2,7 @@ import unittest
 from unittest import TestCase
 
 from image_loader import ImageCropper
+from parameter_file_parser import BoundingBox
 
 
 class RandomParam:
@@ -50,54 +51,40 @@ class ImageCropperTests(TestCase):
         cropper = TestableImageCropper(width_param, height_param, x_param, y_param)
         img_shape = (3, 200, 200)
 
-        x_start, y_start, x_end, y_end = cropper.randomly_crop_image(img_shape, 0, 0, 200, 200)
+        bbox, orig_bbx_moved = cropper.randomly_crop_image(img_shape, BoundingBox(0, 0, 199, 199))
 
-        # Assertions to validate cropping
-        self.assertEqual(50, x_start)
-        self.assertEqual(50, y_start)
-        self.assertEqual(150, x_end)  # 50 + 100
-        self.assertEqual(150, y_end)  # 50 + 100
+        self.assertEqual(BoundingBox(50, 50, 150, 150), bbox)
+        self.assertEqual(BoundingBox(0, 0, 99, 99), orig_bbx_moved)
 
     def test_random_crop_2(self):
         width_param = RandomParam("width", 120, 80, 160)
         height_param = RandomParam("height", 100, 80, 160)
-        x_param = RandomParam("x", 20, 0, 80)
-        y_param = RandomParam("y", 50, 40, 100)
+        x_param = RandomParam("x", 20, 0, 40)
+        y_param = RandomParam("y", 50, 40, 60)
 
         cropper = TestableImageCropper(width_param, height_param, x_param, y_param)
         img_shape = (3, 200, 200)
 
-        # Bounding box that does not cover the entire image
-        x_start, y_start, x_end, y_end = cropper.randomly_crop_image(img_shape, 40, 60, 120, 140)
+        bbox, orig_bbx_moved = cropper.randomly_crop_image(img_shape, BoundingBox(40, 60, 120, 140))
 
-        # Assertions to validate cropping for specific bounding box
-        self.assertEqual(20, x_start)
-        self.assertEqual(50, y_start)
-        self.assertEqual(140, x_end)  # x_start + crop_width
-        self.assertEqual(150, y_end)  # y_start + crop_height
+        self.assertEqual(BoundingBox(20, 50, 140, 150), bbox)
+        self.assertEqual(BoundingBox(20, 10, 100, 90), orig_bbx_moved)
 
     def test_random_crop_lower_right_corner(self):
-        # Edge case where bounding box is in the right lower corner (30x40)
-        width_param = RandomParam("width", 60, 30, 60)
-        height_param = RandomParam("height", 80, 40, 80)
-        x_param = RandomParam("x", 140, 140, 140)
-        y_param = RandomParam("y", 120, 120, 120)
+        width_param = RandomParam("width", 58, 29, 58)
+        height_param = RandomParam("height", 78, 39, 78)
+        x_param = RandomParam("x", 141, 141, 142)
+        y_param = RandomParam("y", 121, 121, 122)
 
         cropper = TestableImageCropper(width_param, height_param, x_param, y_param)
         img_shape = (3, 200, 200)
 
-        # Bounding box in the lower right corner
-        x_min, y_min, x_max, y_max = 170, 160, 200, 200
+        bbox, orig_bbx_moved = cropper.randomly_crop_image(img_shape, BoundingBox(170, 160, 199, 199))
 
-        x_start, y_start, x_end, y_end = cropper.randomly_crop_image(img_shape, x_min, y_min, x_max, y_max)
-
-        self.assertEqual(140, x_start)
-        self.assertEqual(120, y_start)
-        self.assertEqual(200, x_end)
-        self.assertEqual(200, y_end)
+        self.assertEqual(BoundingBox(141, 121, 199, 199), bbox)
+        self.assertEqual(BoundingBox(29, 39, 57, 77), orig_bbx_moved)
 
     def test_random_crop_from_image_003983(self):
-        # Edge case where bounding box is in the right lower corner (30x40)
         width_param = RandomParam("width", 70, 61, 122)
         height_param = RandomParam("height", 80, 59, 118)
         x_param = RandomParam("x", 160, 154, 163)
@@ -106,15 +93,10 @@ class ImageCropperTests(TestCase):
         cropper = TestableImageCropper(width_param, height_param, x_param, y_param)
         img_shape = (3, 512, 512)
 
-        # Bounding box in the lower right corner
-        x_min, y_min, x_max, y_max = 163, 109, 224, 168
+        bbox, orig_bbx_moved = cropper.randomly_crop_image(img_shape, BoundingBox(163, 109, 224, 168))
 
-        x_start, y_start, x_end, y_end = cropper.randomly_crop_image(img_shape, x_min, y_min, x_max, y_max)
-
-        self.assertEqual(160, x_start)
-        self.assertEqual(100, y_start)
-        self.assertEqual(230, x_end)
-        self.assertEqual(180, y_end)
+        self.assertEqual(BoundingBox(160, 100, 230, 180), bbox)
+        self.assertEqual(BoundingBox(3, 9, 64, 68), orig_bbx_moved)
 
 
 if __name__ == '__main__':

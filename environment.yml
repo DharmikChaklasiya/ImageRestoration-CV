@@ -14,3 +14,4 @@ dependencies:
   - matplotlib
   - pytorch-msssim
   - pydantic
+  - wandb

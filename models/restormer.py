@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+# Restormer implementation similar/according to: https://github.com/leftthomas/Restormer/blob/master/model.py
+# with some additional (documented) changes
+
 class MDTA(nn.Module):
     def __init__(self, channels, num_heads):
         super(MDTA, self).__init__()
@@ -108,6 +111,7 @@ class Restormer(nn.Module):
 
         self.refinement = nn.Sequential(*[TransformerBlock(channels[1], num_heads[0], expansion_factor)
                                           for _ in range(num_refinement)])
+        # out_channels set to 1, we only want a grayscale picture, not 3 rgb channels...
         self.output = nn.Conv2d(channels[1], 1, kernel_size=3, padding=1, bias=False)
 
     def forward(self, x):
@@ -121,5 +125,5 @@ class Restormer(nn.Module):
         out_dec2 = self.decoders[1](self.reduces[1](torch.cat([self.ups[1](out_dec3), out_enc2], dim=1)))
         fd = self.decoders[2](torch.cat([self.ups[2](out_dec2), out_enc1], dim=1))
         fr = self.refinement(fd)
-        out = self.output(fr) # + x we certainly do not want to add the input here!
+        out = self.output(fr)  # + x we certainly do not want to add the input here!
         return out

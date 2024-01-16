@@ -2,7 +2,7 @@
 
 import torch
 
-from base_model_training import load_dataset_infos, load_model_and_history
+from base_model_training import load_dataset_infos, load_model_optionally
 from models.unet_architecture import UNet
 
 from pytorch_msssim import SSIM
@@ -38,7 +38,7 @@ num_super_batches = 10
 
 model_file_name = "unet_model.pth"
 
-load_model_and_history(model, model_file_name)
+load_model_optionally(model, model_file_name)
 
 for i in range(1, num_super_batches + 1):
     super_batch_info = f"Super-Batch: {i}/{num_super_batches}"

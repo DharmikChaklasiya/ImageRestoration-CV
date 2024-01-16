@@ -2,20 +2,24 @@ import base64
 import json
 import os
 import random
+from datetime import datetime
 from enum import Enum
 from io import BytesIO
 from math import inf
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 import numpy as np
 import torch
+import wandb
 from matplotlib import pyplot as plt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from torch import nn
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from image_group import ImageGroup
 from image_loader import PosePredictionLabelDataset, ImageTensorGroup
+from parameter_file_parser import BoundingBox, ImageDimension
 
 
 class Phase(Enum):
@@ -130,7 +134,6 @@ class DatasetPartMetaInfo(BaseModel):
     val_ratio: float = 0.2
     num_samples_for_eval: int = 100
     base_output_path: str
-    loss_histories: Dict[str, LossHistory] = {}
     train_indices: List[str] = []
     val_indices: List[str] = []
     eval_indices: List[str] = []
@@ -190,9 +193,6 @@ class DatasetPartMetaInfo(BaseModel):
 
         return train_loader, val_loader, eval_loader
 
-    def get_loss_history(self, model_file_name):
-        return self.loss_histories.setdefault(model_file_name, LossHistory())
-
     def limit_dataset_size(self, n: int):
         """
         Limit the dataset to the first n elements while respecting the train/validation split.
@@ -215,35 +215,148 @@ class DatasetPartMetaInfo(BaseModel):
         else:
             self.eval_indices = random.sample(self.val_indices, self.num_samples_for_eval)
 
+    def limit_validation_dataset_size(self, n: int):
+        """
+        Limit the dataset to the first n elements while respecting the train/validation split.
+        """
+        assert n > 0, "n must be greater than 0"
+        assert n <= len(self.val_indices), "n is greater than the size of the dataset"
+        self.val_indices = self.val_indices[:n]
 
-def save_model_and_history(model, loss_history, filename):
+
+class StoredLossHistory(BaseModel):
+    training_losses: list[float]
+    validation_losses: list[float]
+
+
+class ModelRunSummary(BaseModel):
+    current_part_name: str
+    current_epoch: int
+    current_best_model: str
+    html_summary: str
+    loss_histories: dict[str, StoredLossHistory]
+    model: nn.Module = None
+    device: str = None
+    model_run_root_path: str = None
+    model_run_name: str = None
+    model_run_summary_file_name: str = None
+
+    class Config:
+        arbitrary_types_allowed = True
+        # exclude fields from serialization
+        fields = {
+                    'model': {'exclude': True, 'arbitrary_types_allowed': True},
+                    'device': {'exclude': True},
+                    'model_run_root_path': {'exclude': True},
+                    'model_run_name': {'exclude': True},
+                    'model_run_summary_file_name': {'exclude': True}
+                  }
+
+    def get_loss_history(self) -> LossHistory:
+        loss_history = LossHistory()
+        loss_history.training_losses = self.loss_histories[self.current_part_name].training_losses
+        loss_history.validation_losses = self.loss_histories[self.current_part_name].validation_losses
+        loss_history.min_val_loss = min(loss_history.validation_losses)
+        return loss_history
+
+    def get_html_summary_path(self):
+        return os.path.join(self.model_run_root_path, self.model_run_name, self.html_summary)
+
+    def get_model_file_name(self):
+        return os.path.join(self.model_run_root_path, self.model_run_name, self.current_best_model)
+
+    def train_model_on_all_batches(self, dataset_parts, num_super_batches, wandbinit, train_model_on_one_batch):
+
+        if self.current_part_name is not None:
+            print(f"Restarting from {self.current_part_name}")
+            start_from_current_part = True
+        else:
+            start_from_current_part = False
+
+        for i in range(1, num_super_batches + 1):
+            super_batch_info = f"Super-Batch: {i}/{num_super_batches}"
+            print(f"Running the model in super-batches - {super_batch_info}")
+            for part, dataset_metainfo in dataset_parts.items():
+                if start_from_current_part:
+                    if part == self.current_part_name:
+                        start_from_current_part = False
+                    else:
+                        continue
+                self.current_part_name = part
+                wandbinit(part)
+                train_model_on_one_batch(dataset_metainfo, self, super_batch_info)
+
+        print("Training complete - printing results.")
+
+        for part, dataset_metainfo in dataset_parts.items():
+            print(dataset_metainfo.to_json())
+
+    def update(self, loss_history):
+        self.loss_histories[self.current_part_name].training_losses = loss_history.training_losses
+        self.loss_histories[self.current_part_name].validation_losses = loss_history.validation_losses
+        file_path = os.path.join(self.model_run_root_path, self.model_run_name, self.model_run_summary_file_name)
+
+        with open(file_path, 'w') as f:
+            f.write(self.json())
+
+        timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        wandb.log({"epoch": len(loss_history.training_losses),
+                   "loss": loss_history.training_losses[-1],
+                   "val_loss": loss_history.validation_losses[-1],
+                   "timestamp": timestamp_str})
+
+
+def load_model_run_summary(model_run_name: str, model: nn.Module):
+    model_run_root_path = 'model-runs'
+    file_name_of_summary = 'model_run_summary.json'
+    summary_file_path = os.path.join(model_run_root_path, model_run_name, file_name_of_summary)
+
+    model_run_summary: ModelRunSummary
+
+    try:
+        with open(summary_file_path) as f:
+            data = json.load(f)
+
+        model_run_summary = ModelRunSummary.parse_obj(data)
+        model_file_path = os.path.join(model_run_root_path, model_run_name, model_run_summary.current_best_model)
+        load_model_optionally(model, model_file_path)
+
+        model_run_summary.model = model
+        model_run_summary.device = next(model.parameters()).device
+    except FileNotFoundError:
+        print(f"Model run summary file {summary_file_path} not found. Creating a new model run with an empty loss history.")
+        model_run_summary = ModelRunSummary()
+        model_run_summary.html_summary = model_run_name+".html"
+        model_run_summary.current_best_model = model_run_name+".pth"
+        model_run_summary.model = model
+        model_run_summary.device = next(model.parameters()).device
+
+    model_run_summary.model_run_root_path = model_run_root_path
+    model_run_summary.model_run_name = model_run_name
+    model_run_summary.model_run_summary_file_name = file_name_of_summary
+    return model_run_summary
+
+
+def save_model(model_run_summary: ModelRunSummary):
     state = {
-        'model_state_dict': model.state_dict(),
-        'loss_history': {
-            'training_losses': loss_history.training_losses,
-            'validation_losses': loss_history.validation_losses
-        }
+        'model_state_dict': model_run_summary.model.state_dict()
     }
-    torch.save(state, filename)
+    torch.save(state, model_run_summary.get_model_file_name())
+
+    artifact = wandb.Artifact("model_dict", type="model_dict")
+    artifact.add_file(model_run_summary.get_model_file_name())
+    wandb.log_artifact(artifact)
 
 
-def load_model_and_history(model, filename):
+def load_model_optionally(model: nn.Module, filename: str):
     try:
         state = torch.load(filename)
         model.load_state_dict(state['model_state_dict'])
 
         print(f"\nLoaded model from file {filename}.")
-
-        loss_history_data = state['loss_history']
-        loss_history = LossHistory()
-        loss_history.training_losses = loss_history_data['training_losses']
-        loss_history.validation_losses = loss_history_data['validation_losses']
-
-        return loss_history
     except FileNotFoundError:
-        print(f"File {filename} not found. Loading a new model and an empty loss history.")
-        return LossHistory()
-
+        print(f"File {filename} not found. Loading a new model")
 
 def load_model(model, filename):
     try:
@@ -282,15 +395,18 @@ def normalize_x_and_y_labels(sorted_img_tensor_grps):
 def load_dataset_infos(all_parts):
     ds_parts: Dict[str, DatasetPartMetaInfo] = {}
     for part in all_parts:
-        # Define the file path for the saved data
+
         file_path = get_file_path(part)
 
         if os.path.exists(file_path):
             print(f"Load the existing DatasetPartMetaInfo from the file {file_path}")
             with open(file_path, 'r') as file:
-                data = json.load(file)
-                dataset_part_info = DatasetPartMetaInfo.parse_obj(data)
-                ds_parts[part] = dataset_part_info
+                try:
+                    data = json.load(file)
+                    dataset_part_info = DatasetPartMetaInfo.parse_obj(data)
+                    ds_parts[part] = dataset_part_info
+                except Exception as e:
+                    raise ValueError("Error while parsing file: "+file_path) from e
         else:
             print(f"Create new DatasetPartMetaInfo and save it to file {file_path}")
             all_image_groups, image_group_map = load_input_image_parts(part)
@@ -319,7 +435,8 @@ def get_file_path(part_name: str):
 
 
 def preload_images_from_drive(batch_part: DatasetPartMetaInfo, sorted_image_groups: List[ImageGroup], super_batch_info,
-                              focal_stack_indices: List[int] = None) -> (List[ImageTensorGroup], Dict[str, ImageTensorGroup]):
+                              focal_stack_indices: List[int] = None) -> (
+        List[ImageTensorGroup], Dict[str, ImageTensorGroup]):
     sorted_image_tensor_groups = []
     image_tensor_group_map: Dict[str, ImageTensorGroup] = {}
     focal_stack_indices: List[int] = \
@@ -379,8 +496,35 @@ def load_input_image_parts(part: DatasetPartMetaInfo) -> Tuple[List[ImageGroup],
                         filtered_indices.append(formatted_image_index)
 
                 if len(filtered_indices) > 0:
-                    print(f"\nFiltered out indices because they are not part of the current batch definition, amount : {len(filtered_indices)}")
+                    print(
+                        f"\nFiltered out indices because they are not part of the current batch definition, amount : {len(filtered_indices)}")
 
     all_image_groups = sorted(all_image_groups, key=lambda img_group1: int(img_group1.formatted_image_index))
 
     return all_image_groups, image_group_map
+
+
+class AccentedLoss:
+    def __init__(self, normal_loss, alpha: float = 0.9):
+        self.mse_loss = torch.nn.MSELoss(reduction='none')
+        self.normal_loss = normal_loss
+        self.alpha: float = alpha
+
+    def calculate_combined_loss(self, bboxes: List[BoundingBox], predictions, targets):
+        masks = torch.zeros_like(predictions)
+        for i in range(predictions.size(0)):
+            x_min, y_min, x_max, y_max = bboxes[i].correct_the_box(ImageDimension(512, 512))
+            masks[i, :, y_min:y_max, x_min:x_max] = 1
+
+        masked_predictions = predictions * masks
+        masked_targets = targets * masks
+
+        loss = self.mse_loss(masked_predictions, masked_targets)
+
+        accented_loss = loss.sum() / masks.sum()
+
+        normal_loss = self.normal_loss(predictions, targets)
+
+        return (1 - self.alpha) * normal_loss + self.alpha * accented_loss
+
+

@@ -2,7 +2,7 @@ import torch
 from torch import optim, nn
 from tqdm import tqdm
 
-from base_model_training import Phase, LossHistory, DatasetPartMetaInfo, save_model_and_history, \
+from base_model_training import Phase, LossHistory, DatasetPartMetaInfo, save_model, \
     save_datasetpart_metainfo, preload_images_from_drive, load_input_image_parts
 from image_loader import PosePredictionLabelDataset
 from performance_visualization import ImagePerformance, LabelAndPrediction, \
@@ -114,7 +114,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
 
         should_save = loss_history.add_loss(epoch_loss, avg_val_loss)
         if should_save:
-            save_model_and_history(model, loss_history, model_file_name)
+            save_model(model_run_summary)
             save_datasetpart_metainfo(batch_part)
             print(f"\n\nModel saved in {super_batch_info} - epoch {epoch}")
 

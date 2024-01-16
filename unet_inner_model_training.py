@@ -3,7 +3,7 @@ from torch import optim, nn
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from base_model_training import Phase, save_model_and_history, LossHistory, DatasetPartMetaInfo, \
+from base_model_training import Phase, save_model, LossHistory, DatasetPartMetaInfo, \
     save_datasetpart_metainfo, preload_images_from_drive, load_input_image_parts
 from image_loader import GroundTruthLabelDataset
 from performance_visualization import ImagePerformance, LabelAndPrediction, update_report_samples_for_epoch, \
@@ -100,7 +100,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
 
         should_save = loss_history.add_loss(epoch_loss, avg_val_loss)
         if should_save:
-            save_model_and_history(model, loss_history, model_file_name)
+            save_model(model, loss_history, model_file_name)
             save_datasetpart_metainfo(batch_part)
             print(f"\n\nModel saved in {super_batch_info} - epoch {epoch}")
 

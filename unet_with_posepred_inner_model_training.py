@@ -3,17 +3,20 @@ from torch import optim, nn
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from base_model_training import Phase, save_model_and_history, LossHistory, DatasetPartMetaInfo, \
-    save_datasetpart_metainfo, preload_images_from_drive, load_input_image_parts
+from base_model_training import Phase, save_model, LossHistory, DatasetPartMetaInfo, \
+    save_datasetpart_metainfo, preload_images_from_drive, load_input_image_parts, AccentedLoss
 from image_loader import GroundTruthLabelDataset
+from parameter_file_parser import BoundingBox
 from performance_visualization import ImagePerformance, LabelAndPrediction, update_report_samples_for_epoch, \
-    update_report_with_losses, correct_bounding_box
+    update_report_with_losses
 
 
-def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, posepred_model: nn.Module, device, super_batch_info: str, model_file_name: str):
-    sorted_image_groups, image_group_map = load_input_image_parts([batch_part.part_name])
+def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, posepred_model: nn.Module, device,
+                             super_batch_info: str, model_file_name: str):
+    sorted_image_groups, image_group_map = load_input_image_parts(batch_part)
 
-    sorted_image_tensor_groups, image_tensor_group_map = preload_images_from_drive(batch_part, sorted_image_groups, super_batch_info)
+    sorted_image_tensor_groups, image_tensor_group_map = preload_images_from_drive(batch_part, sorted_image_groups,
+                                                                                   super_batch_info)
 
     prediction_and_labels_dataset = GroundTruthLabelDataset(sorted_image_tensor_groups)
     loss_history: LossHistory = batch_part.get_loss_history(model_file_name)
@@ -71,7 +74,6 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
             if i > 0 and (i % 20 == 0 or i == len(train_loader) - 1):
                 update_report_with_losses(epoch + 1, loss_history, html_file_path)
 
-        # Print average loss for the epoch
         epoch_loss = loss_history.current_running_loss.running_loss / len(train_loader)
 
         model.eval()
@@ -97,37 +99,12 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
 
         should_save = loss_history.add_loss(epoch_loss, avg_val_loss)
         if should_save:
-            save_model_and_history(model, loss_history, model_file_name)
+            save_model(model, loss_history, model_file_name)
             save_datasetpart_metainfo(batch_part)
             print(f"\n\nModel saved in {super_batch_info} - epoch {epoch}")
 
         print(f"\n{super_batch_info}-part:{batch_part.part_name}-epoch {epoch + 1}/{num_epochs}, "
               f"Loss: {epoch_loss:.6f}, Validation Loss: {avg_val_loss:.6f}")
-
-
-def create_accented_loss(pose_outputs, outputs, ground_truth):
-    mse_loss = torch.nn.MSELoss(reduction='none')
-
-    # Initialize tensor to store all masks
-    masks = torch.zeros_like(outputs)
-
-    # Create masks for each image in the batch
-    for i in range(outputs.size(0)):
-        bbox = pose_outputs[i].int()
-        x_min, y_min, x_max, y_max = correct_bounding_box(bbox, 512, 512)
-        masks[i, :, y_min:y_max, x_min:x_max] = 1
-
-    # Apply masks
-    masked_outputs = outputs * masks
-    masked_ground_truth = ground_truth * masks
-
-    # Compute MSE loss for masked regions
-    loss = mse_loss(masked_outputs, masked_ground_truth)
-
-    # Average the loss over non-zero elements (masked areas)
-    loss = loss.sum() / masks.sum()
-
-    return loss
 
 
 def forward_call_and_loss_calc(ground_truth, inputs, loss_function, model, posepred_model):
@@ -136,12 +113,7 @@ def forward_call_and_loss_calc(ground_truth, inputs, loss_function, model, posep
 
     outputs = model(inputs)
 
-    primary_loss = loss_function(outputs, ground_truth)
-
-    pose_loss = create_accented_loss(pose_outputs, outputs, ground_truth)
-
-    combined_loss = primary_loss + 10 * pose_loss
+    combined_loss = AccentedLoss(loss_function).calculate_combined_loss(
+        [BoundingBox(*pose_output) for pose_output in pose_outputs], outputs, ground_truth)
 
     return outputs, combined_loss
-
-

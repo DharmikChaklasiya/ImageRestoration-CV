@@ -1,9 +1,12 @@
 # Import necessary libraries
+from typing import Dict
 
 import torch
+import wandb
 from pytorch_msssim import SSIM
 
-from base_model_training import load_dataset_infos, load_model_and_history
+from base_model_training import load_dataset_infos, load_model_optionally, load_model_run_summary, DatasetPartMetaInfo, \
+    ModelRunSummary
 from models.restormer import Restormer
 from restormer_inner_model_training import train_model_on_one_batch
 
@@ -30,21 +33,46 @@ all_parts = ["Part1", "Part1 2", "Part1 3", "Part2", "Part2 2", "Part2 3"]
 
 model = Restormer().to(device)
 
-dataset_parts = load_dataset_infos(all_parts)
+dataset_parts: Dict[str, DatasetPartMetaInfo] = load_dataset_infos(all_parts)
 
 num_super_batches = 10
 
-model_file_name = "restormer_model.pth"
+wandb.login(key='e84f9aa9585ed75083b2923b94f68b05c287fe7e')
 
-load_model_and_history(model, model_file_name)
 
-for i in range(1, num_super_batches + 1):
-    super_batch_info = f"Super-Batch: {i}/{num_super_batches}"
-    print(f"Running the model in super-batches - {super_batch_info}")
-    for part, dataset_metainfo in dataset_parts.items():
-        train_model_on_one_batch(dataset_metainfo, model, device, super_batch_info, model_file_name)
+def wandbinit(part_name: str):
+    run_name = "Restormer-" + part_name + "-2024-01-10"
+    project_name = "ws23-d7-computervision"
 
-print("Training complete - printing results.")
+    api = wandb.Api()
+    runs = api.runs(f"{project_name}")
+    current_run = None
+    for run in runs:
+        if run.name == run_name:
+            current_run = run
+            break
 
-for part, dataset_metainfo in dataset_parts.items():
-    print(dataset_metainfo.to_json())
+    if current_run:
+        print("Wand will resume run : "+current_run.id)
+    else:
+        print("No existing run found in this project fitting this run name - so we are starting a new run from scratch")
+
+    wandb.init(
+        resume=current_run.id if current_run is not None else None,
+        project=project_name,
+        config={
+            "learning_rate": 0.0001,
+            "architecture": "restormer",
+            "dataset": "computervision-simulation-results-5k-images-" + part_name,
+            "epochs": 100,
+            "part_name": part_name,
+            "batch_size": 1,
+            "model": "restormer_model.pth"
+        },
+        name=run_name
+    )
+
+
+model_run_summary: ModelRunSummary = load_model_run_summary("2024-01-10-restormer-base-architecture", model)
+
+model_run_summary.train_model_on_all_batches(dataset_parts, num_super_batches, wandbinit, train_model_on_one_batch)

@@ -2,7 +2,7 @@
 
 import torch
 
-from base_model_training import load_dataset_infos, load_model_and_history, load_model
+from base_model_training import load_dataset_infos, load_model_optionally, load_model
 from models.poseprediction_architecture import PosePredictionModel, FCConfig
 from models.unet_architecture import UNet
 
@@ -45,7 +45,7 @@ num_super_batches = 10
 
 model_file_name = "unet_with_posepred_model.pth"
 
-load_model_and_history(model, model_file_name)
+load_model_optionally(model, model_file_name)
 
 for i in range(1, num_super_batches + 1):
     super_batch_info = f"Super-Batch: {i}/{num_super_batches}"

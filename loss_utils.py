@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 
-# in oder to avoid negative results
+# in order to avoid negative results
 ssim_norm = SSIM(data_range=1., nonnegative_ssim=True)
 
 

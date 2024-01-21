@@ -1,7 +1,7 @@
 import torch.nn as nn
 
-from unet_decoder import UNetDecoder
-from unet_encoder import UNetEncoder
+from models.unet_decoder import UNetDecoder
+from models.unet_encoder import UNetEncoder
 
 
 class UNet(nn.Module):

@@ -13,26 +13,27 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-def psnr_value(output, target):    
-        return cv2.PSNR(np.float32(output), np.float32(target))
+def psnr_value(output, target):
+    output = np.array(output)
+    target = np.array(target)
+    # Check if the images have the same size
+    if output.shape != target.shape:
+        raise ValueError(f"Image sizes are different. Output: {output.shape}, Target: {target.shape}")
+        
+    return cv2.PSNR(np.float32(output), np.float32(target))
 
 def ssim_value(output, target):
-        output_tensor = transform(output).unsqueeze(0)  # Add batch dimension
-        target_tensor = transform(target).unsqueeze(0)  # Add batch dimension
+    output_tensor = transform(output).unsqueeze(0)  # Add batch dimension
+    target_tensor = transform(target).unsqueeze(0)  # Add batch dimension
 
-        #output_tensor.size(1)  # Grayscale images
-        # Initialize SSIM for single-channel images
-        ssim_norm = SSIM(data_range=1., nonnegative_ssim=True, channel=1)
+    #output_tensor.size(1)  # Grayscale images
+    # Initialize SSIM for single-channel images
+    ssim_norm = SSIM(data_range=1., nonnegative_ssim=True, channel=1)
 
-        # Calculate SSIM
-        ssim_out = ssim_norm(output_tensor, target_tensor)
-        return ssim_out.item()
+    # Calculate SSIM
+    ssim_out = ssim_norm(output_tensor, target_tensor)
+    return ssim_out.item()
 
-# Load images
-img1_path = "C:/Users/dharm/Downloads/download.png"
-img2_path = "C:/Users/dharm/Downloads/GT.png"
-img1 = Image.open(img1_path).convert('L')
-img2 = Image.open(img2_path).convert('L')
 
 # Calculate PSNR between the two images
 #psnr_2 = psnr_value(img1, img2)
@@ -59,6 +60,11 @@ for prefix in image_prefixes:
     outcome_img = Image.open(outcome_image_path).convert('L')
     gt_img = Image.open(gt_image_path).convert('L')
 
+    # Add a size check before calculating PSNR
+    if outcome_img.size != gt_img.size:
+        print(f"Skipping image {prefix} due to size mismatch: Outcome image size {outcome_img.size}, GT image size {gt_img.size}")
+        continue
+
     psnr_score = psnr_value(outcome_img, gt_img)
     ssim_score = ssim_value(outcome_img, gt_img)
 
@@ -74,6 +80,7 @@ plt.plot(psnr_scores, label='PSNR')
 plt.title('PSNR Scores')
 plt.xlabel('Image Index')
 plt.ylabel('PSNR')
+plt.xticks([])
 
 # SSIM plot
 plt.subplot(1, 2, 2)
@@ -81,6 +88,8 @@ plt.plot(ssim_scores, label='SSIM', color='orange')
 plt.title('SSIM Scores')
 plt.xlabel('Image Index')
 plt.ylabel('SSIM')
+plt.xticks([])
 
+plt.legend()
 plt.tight_layout()
 plt.show()

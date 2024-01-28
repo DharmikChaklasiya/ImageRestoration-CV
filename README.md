@@ -17,9 +17,9 @@ conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvi
 
 Variables to be set by the user:
 
-    model_type = 'restormer'
+    
     model_file_name = '/ImageRestoration-CV/restormer_model.pth'
-    input_img_folder  = '/input_images/'
+    input_img_folder  = '/test_images/'
     output_folder = '/Results'
     
 1. Inputs - focal stacks stored in folder as subfolders test.py takes the variable input_img_folder. If there is a ground truth image in some focal stacks then also metrics are calculated and saved.

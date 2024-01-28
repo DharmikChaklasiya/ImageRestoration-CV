@@ -18,7 +18,7 @@ conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvi
 Variables to be set by the user:
 
     
-    model_file_name = '/ImageRestoration-CV/restormer_model.pth'
+  
     input_img_folder  = '/test_images/'
     output_folder = '/Results'
     

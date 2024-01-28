@@ -91,15 +91,22 @@ class UserModelHandler(AbstractModelHandler):
         if not os.path.isdir(directory_path):
             print(f"Error: {directory_path} is not a valid directory.")
             return image_list
-        
-        for filename in os.listdir(directory_path):            
+        gt = []
+        bool_gt = False
+        for filename in sorted(os.listdir(directory_path)):  
+            if filename[0] =='.':
+              continue          
             file_path = os.path.join(directory_path, filename)
-            if os.path.isfile(file_path) and any(file_path.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):            
-                image_list.append(load_single_image(file_path))
+            if os.path.isfile(file_path) and any(file_path.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']) :
+                if '_gt' in filename:
+                    gt =  Image.open(file_path).convert('L')
+                    bool_gt = True
+                else:
+                    image_list.append(load_single_image(file_path))
             else:
                 raise Exception('Images are not extension jpg,jpeg,png,gif')
             
-        return align_of_inputs(image_list)
+        return align_of_inputs(image_list),gt,bool_gt
     
 
 
@@ -120,5 +127,5 @@ class UserModelHandler(AbstractModelHandler):
         output_image = tensor_to_base64(output)
         decoded_image = base64.b64decode(output_image)
         pil_image = Image.open(BytesIO(decoded_image))
-        pil_image.save(f'{folder}/output.jpg')
+        pil_image.save(folder)
        

@@ -1,15 +1,13 @@
-import random
 from typing import List, Optional, Dict
 
 import torch
-from torch import nn
 from torch.nn import functional as F
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
 
 from base_model_training import Phase, save_model, LossHistory, DatasetPartMetaInfo, \
-    save_datasetpart_metainfo, preload_images_from_drive, load_input_image_parts, AccentedLoss, ModelRunSummary
+    preload_images_from_drive, load_input_image_parts, AccentedLoss, ModelRunSummary
 from image_loader import GroundTruthLabelDataset, ImageTensorGroup, ImageCropper
 from parameter_file_parser import BoundingBox
 from performance_visualization import ImagePerformance, LabelAndPrediction, update_report_samples_for_epoch, \
@@ -49,6 +47,7 @@ def randomly_crop_image(input, ground_truth, img_tensor_group: ImageTensorGroup)
 
 def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model_run_summary: ModelRunSummary, super_batch_info: str):
     batch_part.limit_validation_dataset_size(400)
+    #batch_part.limit_dataset_size(20) do this if you want to start with a low amount of data
 
     sorted_image_groups, image_group_map = load_input_image_parts(batch_part)
     image_tensor_group_map: Dict[str, ImageTensorGroup]
@@ -62,7 +61,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model_run_summary:
     train_loader, val_loader, eval_dataloader = batch_part.create_dataloaders(predication_and_labels_dataset,
                                                                               train_batch_size=1)
 
-    num_epochs = 50
+    num_epochs = 25
 
     loss_function = F.l1_loss  # ssim_based_loss  # F.mse_loss
     optimizer = AdamW(model_run_summary.model.parameters(), lr=0.0001, weight_decay=1e-5)
@@ -145,12 +144,12 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model_run_summary:
 
         evaluate_rows_print_images_to_report(eval_dataloader, model_run_summary.model, epoch)
 
-        model_run_summary.update(loss_history)
-
         should_save = loss_history.add_loss(epoch_loss, avg_val_loss)
-        if should_save:
+        if should_save and epoch > 4:
             save_model(model_run_summary)
             print(f"\n\nModel saved in {super_batch_info} - epoch {epoch + 1}")
+
+        model_run_summary.update(loss_history)
 
         print(f"\n{super_batch_info}-part:{batch_part.part_name}-epoch {epoch + 1}/{num_epochs}, "
               f"Loss: {epoch_loss:.6f}, Validation Loss: {avg_val_loss:.6f}")
@@ -163,8 +162,8 @@ def forward_pass_and_loss(model_run_summary: ModelRunSummary, ground_truth, inpu
     except Exception as e:
         raise ValueError("Error while handling inputs of shape : " + str(inputs[0].shape)) from e
 
-    # right now, I don't see the need for an accented loss here at all - the restormer handles this very nicely
-    # combined_loss = AccentedLoss(loss_function).calculate_combined_loss(bboxes, outputs, ground_truth)
+    # right now, I don't see the need for an accented loss here at all - the restormer handles this very nicely, but let's try nevertheless:
+    loss = AccentedLoss(loss_function).calculate_combined_loss(bboxes, outputs, ground_truth)
 
-    loss = loss_function(outputs, ground_truth)
+    # original loss - to be restored after experiment: loss = loss_function(outputs, ground_truth)
     return outputs, loss

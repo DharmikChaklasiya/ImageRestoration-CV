@@ -1,5 +1,6 @@
 import base64
 import json
+import math
 import os
 import random
 from datetime import datetime
@@ -225,8 +226,8 @@ class DatasetPartMetaInfo(BaseModel):
 
 
 class StoredLossHistory(BaseModel):
-    training_losses: list[float]
-    validation_losses: list[float]
+    training_losses: list[float] = []
+    validation_losses: list[float] = []
 
 
 class ModelRunSummary(BaseModel):
@@ -241,22 +242,38 @@ class ModelRunSummary(BaseModel):
     model_run_name: str = None
     model_run_summary_file_name: str = None
 
+    def __init__(self,
+                 current_part_name: str,
+                 current_epoch: int,
+                 current_best_model: str,
+                 html_summary: str,
+                 loss_histories: dict[str, StoredLossHistory],
+                 **kwargs):
+        super().__init__(current_part_name=current_part_name,
+                         current_epoch=current_epoch,
+                         current_best_model=current_best_model,
+                         html_summary=html_summary,
+                         loss_histories=loss_histories,
+                         **kwargs)
+
     class Config:
         arbitrary_types_allowed = True
         # exclude fields from serialization
         fields = {
-                    'model': {'exclude': True, 'arbitrary_types_allowed': True},
-                    'device': {'exclude': True},
-                    'model_run_root_path': {'exclude': True},
-                    'model_run_name': {'exclude': True},
-                    'model_run_summary_file_name': {'exclude': True}
-                  }
+            'model': {'exclude': True, 'arbitrary_types_allowed': True},
+            'device': {'exclude': True},
+            'model_run_root_path': {'exclude': True},
+            'model_run_name': {'exclude': True},
+            'model_run_summary_file_name': {'exclude': True}
+        }
 
     def get_loss_history(self) -> LossHistory:
         loss_history = LossHistory()
-        loss_history.training_losses = self.loss_histories[self.current_part_name].training_losses
-        loss_history.validation_losses = self.loss_histories[self.current_part_name].validation_losses
-        loss_history.min_val_loss = min(loss_history.validation_losses)
+        stored_loss_history = self.loss_histories.setdefault(self.current_part_name, StoredLossHistory())
+        loss_history.training_losses = stored_loss_history.training_losses
+        loss_history.validation_losses = stored_loss_history.validation_losses
+        loss_history.min_val_loss = min(loss_history.validation_losses) if len(
+            loss_history.validation_losses) > 0 else math.inf
         return loss_history
 
     def get_html_summary_path(self):
@@ -285,11 +302,12 @@ class ModelRunSummary(BaseModel):
                 self.current_part_name = part
                 wandbinit(part)
                 train_model_on_one_batch(dataset_metainfo, self, super_batch_info)
+                wandb.finish()
 
         print("Training complete - printing results.")
 
         for part, dataset_metainfo in dataset_parts.items():
-            print(dataset_metainfo.to_json())
+            print(dataset_metainfo.json())
 
     def update(self, loss_history):
         self.loss_histories[self.current_part_name].training_losses = loss_history.training_losses
@@ -297,7 +315,7 @@ class ModelRunSummary(BaseModel):
         file_path = os.path.join(self.model_run_root_path, self.model_run_name, self.model_run_summary_file_name)
 
         with open(file_path, 'w') as f:
-            f.write(self.json())
+            json.dump(self.dict(), f, indent=4)
 
         timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -324,17 +342,21 @@ def load_model_run_summary(model_run_name: str, model: nn.Module):
 
         model_run_summary.model = model
         model_run_summary.device = next(model.parameters()).device
-    except FileNotFoundError:
-        print(f"Model run summary file {summary_file_path} not found. Creating a new model run with an empty loss history.")
-        model_run_summary = ModelRunSummary()
-        model_run_summary.html_summary = model_run_name+".html"
-        model_run_summary.current_best_model = model_run_name+".pth"
+    except FileNotFoundError as e:
+        print(
+            f"Model run summary file {summary_file_path} not found: {e}. Creating a new model run with an empty loss history.")
+        model_run_summary = ModelRunSummary(current_part_name='Part1',
+                                            current_epoch=0,
+                                            current_best_model=model_run_name + ".pth",
+                                            html_summary=model_run_name + ".html", loss_histories={})
         model_run_summary.model = model
         model_run_summary.device = next(model.parameters()).device
 
     model_run_summary.model_run_root_path = model_run_root_path
     model_run_summary.model_run_name = model_run_name
     model_run_summary.model_run_summary_file_name = file_name_of_summary
+    os.makedirs(model_run_summary.model_run_root_path, exist_ok=True)
+    os.makedirs(os.path.join(model_run_summary.model_run_root_path, model_run_summary.model_run_name), exist_ok=True)
     return model_run_summary
 
 
@@ -344,7 +366,7 @@ def save_model(model_run_summary: ModelRunSummary):
     }
     torch.save(state, model_run_summary.get_model_file_name())
 
-    artifact = wandb.Artifact("model_dict", type="model_dict")
+    artifact = wandb.Artifact(model_run_summary.current_best_model, type="model_dict")
     artifact.add_file(model_run_summary.get_model_file_name())
     wandb.log_artifact(artifact)
 
@@ -357,6 +379,7 @@ def load_model_optionally(model: nn.Module, filename: str):
         print(f"\nLoaded model from file {filename}.")
     except FileNotFoundError:
         print(f"File {filename} not found. Loading a new model")
+
 
 def load_model(model, filename):
     try:
@@ -406,7 +429,7 @@ def load_dataset_infos(all_parts):
                     dataset_part_info = DatasetPartMetaInfo.parse_obj(data)
                     ds_parts[part] = dataset_part_info
                 except Exception as e:
-                    raise ValueError("Error while parsing file: "+file_path) from e
+                    raise ValueError("Error while parsing file: " + file_path) from e
         else:
             print(f"Create new DatasetPartMetaInfo and save it to file {file_path}")
             all_image_groups, image_group_map = load_input_image_parts(part)
@@ -528,3 +551,19 @@ class AccentedLoss:
         return (1 - self.alpha) * normal_loss + self.alpha * accented_loss
 
 
+wandb_api_key = 'e84f9aa9585ed75083b2923b94f68b05c287fe7e'
+
+
+def find_existing_run(project_name, run_name):
+    api = wandb.Api()
+    runs = api.runs(f"{project_name}")
+    current_run = None
+    for run in runs:
+        if run.name == run_name:
+            current_run = run
+            break
+    if current_run:
+        print("Wand will resume run : " + current_run.id)
+    else:
+        print("No existing run found in this project fitting this run name - so we are starting a new run from scratch")
+    return current_run

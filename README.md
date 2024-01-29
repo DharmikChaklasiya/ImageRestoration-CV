@@ -33,6 +33,6 @@ The .zip file contains only the main files that you need in order to run our mai
 
 
 ### Google Drive
-https://drive.google.com/drive/u/1/folders/0AHB29zssmbLZUk9PVA
+https://drive.google.com/drive/u/1/folders/1NH22rZQpCNROsjtjY5SOg6qGhdytBych
 
-Here you can see the Test Set that we have used to test our images on!
+Here you can see the Test Set that we have used to test our images on! You can also see the real_integral images that we used to predict and the output results to them /they are also included in the .zip file/.

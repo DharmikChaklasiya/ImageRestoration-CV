@@ -29,4 +29,4 @@ Variables to be set by the user:
 ### Github - Full Package Code
 https://github.com/DharmikChaklasiya/ImageRestoration-CV.git
 
-Since we have started with our own U-Net model, bounding boxes and many additional implementations, we are providing the full code /not only for our main model - Restormer, but also all of the code that we have been working on for the past 2 months/. The crucial files that you need in order to run the main Restormer model are in the .zip file.
+The .zip file contains only the main files that you need in order to run our main Restormer model. Since we have started with a U-Net model, bounding boxes and many additional implementations, we are providing the Github to our full code /not only for our main model - Restormer, but also all of the code that we have been working on for the past 2 months, including U-Net, bounding boxes, etc./. 

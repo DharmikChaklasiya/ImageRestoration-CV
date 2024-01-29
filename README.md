@@ -13,6 +13,13 @@ and execute something like the following adapted to your environment
 conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
 
 
+### Google Drive
+https://drive.google.com/drive/u/1/folders/1NH22rZQpCNROsjtjY5SOg6qGhdytBych
+
+Since the model is too large, we could not upload it in the .zip file but instead uploaded it in the Google Drive in folder "/weights". You will have to download and save it in the local directory "/weights".
+In the Drive, you can also see the Test Set that we have used to test our images on! You can also see the real_integral images that we used to predict and the output results to them /they are also included in the .zip file/.
+
+
 ## Running test.py 
 
 Variables to be set by the user:
@@ -30,9 +37,3 @@ Variables to be set by the user:
 https://github.com/DharmikChaklasiya/ImageRestoration-CV.git
 
 The .zip file contains only the main files that you need in order to run our main Restormer model. Since we have started with a U-Net model, bounding boxes and many additional implementations, we are providing the Github to our full code /not only for our main model - Restormer, but also all of the code that we have been working on for the past 2 months, including U-Net, bounding boxes, etc./. 
-
-
-### Google Drive
-https://drive.google.com/drive/u/1/folders/1NH22rZQpCNROsjtjY5SOg6qGhdytBych
-
-Here you can see the Test Set that we have used to test our images on! You can also see the real_integral images that we used to predict and the output results to them /they are also included in the .zip file/.

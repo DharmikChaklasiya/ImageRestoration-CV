@@ -19,7 +19,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
     pose_prediction_label_dataset = PosePredictionLabelDataset(sorted_image_tensor_groups)
     loss_history: LossHistory = batch_part.get_loss_history(model_file_name)
 
-    train_loader, val_loader, eval_dataloader = batch_part.create_dataloaders(pose_prediction_label_dataset)
+    train_loader, val_loader, test_loader, eval_dataloader = batch_part.create_dataloaders(pose_prediction_label_dataset)
 
     loss_function = torch.nn.MSELoss()
 

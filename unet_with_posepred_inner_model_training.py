@@ -21,7 +21,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
     prediction_and_labels_dataset = GroundTruthLabelDataset(sorted_image_tensor_groups)
     loss_history: LossHistory = batch_part.get_loss_history(model_file_name)
 
-    train_loader, val_loader, eval_dataloader = batch_part.create_dataloaders(prediction_and_labels_dataset)
+    train_loader, val_loader, test_loader, eval_dataloader = batch_part.create_dataloaders(prediction_and_labels_dataset)
 
     loss_function = F.l1_loss  # ssim_based_loss  # F.mse_loss
     optimizer = optim.Adam(model.parameters(), lr=0.001)

@@ -18,7 +18,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
     pose_prediction_label_dataset = GroundTruthLabelDataset(sorted_image_tensor_groups)
     loss_history: LossHistory = batch_part.get_loss_history(model_file_name)
 
-    train_loader, val_loader, eval_dataloader = batch_part.create_dataloaders(pose_prediction_label_dataset)
+    train_loader, val_loader, test_loader, eval_loader = batch_part.create_dataloaders(pose_prediction_label_dataset)
 
     loss_function = F.l1_loss  # ssim_based_loss  # F.mse_loss
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -96,7 +96,7 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model: nn.Module, 
 
         avg_val_loss = loss_history.current_running_loss.running_loss / len(val_loader)
 
-        evaluate_rows_print_images_to_report(eval_dataloader, model, epoch)
+        evaluate_rows_print_images_to_report(eval_loader, model, epoch)
 
         should_save = loss_history.add_loss(epoch_loss, avg_val_loss)
         if should_save:

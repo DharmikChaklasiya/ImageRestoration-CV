@@ -29,13 +29,14 @@ def randomly_crop_images(inputs, ground_truths, img_tensor_groups: List[ImageTen
     return torch.stack(new_inputs), torch.stack(new_ground_truths), new_bbxes
 
 
-def randomly_crop_image(input, ground_truth, img_tensor_group: ImageTensorGroup) -> (torch.Tensor, torch.Tensor, BoundingBox):
+def randomly_crop_image(input, ground_truth, img_tensor_group: ImageTensorGroup) -> (
+torch.Tensor, torch.Tensor, BoundingBox):
     orig_bbox: Optional[BoundingBox] = None
 
     try:
         orig_bbox = BoundingBox(*img_tensor_group.pose_prediction_labels)
         bbox, moved_orig_bbx = ImageCropper().randomly_crop_image(input.shape, orig_bbox,
-                                                  new_bbox_width=256, new_bbox_height=256)
+                                                                  new_bbox_width=256, new_bbox_height=256)
     except Exception as e:
         raise ValueError(
             "Problem with img : {} and bounding rectangle {}".format(img_tensor_group.image_group.formatted_image_index,
@@ -45,9 +46,10 @@ def randomly_crop_image(input, ground_truth, img_tensor_group: ImageTensorGroup)
     return new_input, new_ground_truth, moved_orig_bbx
 
 
-def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model_run_summary: ModelRunSummary, super_batch_info: str):
+def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model_run_summary: ModelRunSummary,
+                             super_batch_info: str):
     batch_part.limit_validation_dataset_size(400)
-    #batch_part.limit_dataset_size(20) do this if you want to start with a low amount of data
+    # batch_part.limit_dataset_size(20) do this if you want to start with a low amount of data
 
     sorted_image_groups, image_group_map = load_input_image_parts(batch_part)
     image_tensor_group_map: Dict[str, ImageTensorGroup]
@@ -58,8 +60,9 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model_run_summary:
     predication_and_labels_dataset = GroundTruthLabelDataset(sorted_image_tensor_groups)
     loss_history: LossHistory = model_run_summary.get_loss_history()
 
-    train_loader, val_loader, eval_dataloader = batch_part.create_dataloaders(predication_and_labels_dataset,
-                                                                              train_batch_size=1)
+    train_loader, val_loader, test_dataloader, eval_dataloader = batch_part.create_dataloaders(
+        predication_and_labels_dataset,
+        train_batch_size=1)
 
     num_epochs = 25
 
@@ -97,7 +100,8 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model_run_summary:
             optimizer.zero_grad()
 
             inputs, ground_truths, newbbxes = randomly_crop_images(inputs, ground_truths,
-                                                         [image_tensor_group_map[index] for index in img_group_indices])
+                                                                   [image_tensor_group_map[index] for index in
+                                                                    img_group_indices])
 
             outputs, loss = forward_pass_and_loss(model_run_summary, ground_truths, inputs, loss_function, newbbxes)
 
@@ -115,7 +119,8 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model_run_summary:
                 update_report_with_losses(epoch + 1, loss_history, model_run_summary.get_html_summary_path())
                 update_report_with_sample_training_images(epoch + 1, inputs, ground_truths, newbbxes,
                                                           [image_tensor_group_map[index] for index in
-                                                           img_group_indices], model_run_summary.get_html_summary_path())
+                                                           img_group_indices],
+                                                          model_run_summary.get_html_summary_path())
 
         lr_scheduler.step()
 
@@ -155,7 +160,8 @@ def train_model_on_one_batch(batch_part: DatasetPartMetaInfo, model_run_summary:
               f"Loss: {epoch_loss:.6f}, Validation Loss: {avg_val_loss:.6f}")
 
 
-def forward_pass_and_loss(model_run_summary: ModelRunSummary, ground_truth, inputs, loss_function, bboxes: List[BoundingBox]):
+def forward_pass_and_loss(model_run_summary: ModelRunSummary, ground_truth, inputs, loss_function,
+                          bboxes: List[BoundingBox]):
     inputs, ground_truth = inputs.to(model_run_summary.device), ground_truth.to(model_run_summary.device)
     try:
         outputs = model_run_summary.model(inputs)

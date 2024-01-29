@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from io import BytesIO
 from math import inf
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 
 import numpy as np
 import torch
@@ -132,11 +132,13 @@ class LossHistory(BaseModel):
 
 class DatasetPartMetaInfo(BaseModel):
     part_name: str
-    val_ratio: float = 0.2
+    val_ratio: float = 0.1
+    test_ratio: float = 0.1
     num_samples_for_eval: int = 100
     base_output_path: str
     train_indices: List[str] = []
     val_indices: List[str] = []
+    test_indices: List[str] = []
     eval_indices: List[str] = []
     all_indices: List[str] = []
 
@@ -157,14 +159,17 @@ class DatasetPartMetaInfo(BaseModel):
         total_size = len(self.all_indices)
 
         val_size = int(total_size * self.val_ratio)
-        train_size = total_size - val_size
+        test_size = int(total_size * self.test_ratio)
+        train_size = total_size - val_size - test_size
 
         self.train_indices = self.all_indices[:train_size]
-        self.val_indices = self.all_indices[train_size:]
+        self.val_indices = self.all_indices[train_size:train_size + val_size]
+        self.test_indices = self.all_indices[train_size + val_size:]
         self.eval_indices = random.sample(self.val_indices, self.num_samples_for_eval)
 
     def create_dataloaders(self, dataset: torch.utils.data.Dataset, train_batch_size=4, val_batch_size=4,
-                           eval_batch_size=1) -> Tuple[DataLoader, DataLoader, DataLoader]:
+                           test_batch_size=1, eval_batch_size=1) -> tuple[
+            DataLoader[Any], DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
 
         image_group_map = {}
 
@@ -181,18 +186,21 @@ class DatasetPartMetaInfo(BaseModel):
 
         num_train_indices = [image_formatted_to_numerical_index_map[idx] for idx in self.train_indices]
         num_val_indices = [image_formatted_to_numerical_index_map[idx] for idx in self.val_indices]
+        num_test_indices = [image_formatted_to_numerical_index_map[idx] for idx in self.test_indices]
         num_eval_indices = [image_formatted_to_numerical_index_map[idx] for idx in self.eval_indices]
 
         train_subset = Subset(dataset, num_train_indices)
         val_subset = Subset(dataset, num_val_indices)
+        test_subset = Subset(dataset, num_test_indices)
         eval_subset = Subset(dataset, num_eval_indices)
 
         # Create DataLoaders
         train_loader = DataLoader(train_subset, batch_size=train_batch_size, shuffle=True)
         val_loader = DataLoader(val_subset, batch_size=val_batch_size, shuffle=False)
+        test_loader = DataLoader(test_subset, batch_size=test_batch_size, shuffle=False)
         eval_loader = DataLoader(eval_subset, batch_size=eval_batch_size, shuffle=False)
 
-        return train_loader, val_loader, eval_loader
+        return train_loader, val_loader, test_loader, eval_loader
 
     def limit_dataset_size(self, n: int):
         """

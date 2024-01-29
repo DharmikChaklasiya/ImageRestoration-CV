@@ -26,3 +26,7 @@ Variables to be set by the user:
 1. Inputs - focal stacks stored in folder as subfolders /as explained above/. Test.py takes the variable input_img_folder. There are two cases here: if you want to only test the model, then you should not provide GT image and it will just output a predicted image in the "Result" folder. If you have GT images in the same directory, as the focal stacks, named "..._gt", then it will save the predicted output of those images and retrieve a plot with PSNR and SSIM scores.
 2. Outputs - files are outputed in "Result" which is provided with the same name as the folder of the focal stack and _pred prefix. Also a plot of metrics is saved as png.
 
+### Github - Full Package Code
+https://github.com/DharmikChaklasiya/ImageRestoration-CV.git
+
+Since we have started with our own U-Net model, bounding boxes and many additional implementations, we are providing the full code /not only for our main model - Restormer, but also all of the code that we have been working on for the past 2 months/. The crucial files that you need in order to run the main Restormer model are in the .zip file.

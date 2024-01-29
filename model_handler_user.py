@@ -94,7 +94,7 @@ class UserModelHandler(AbstractModelHandler):
         gt = []
         bool_gt = False
         for filename in sorted(os.listdir(directory_path)):  
-            if filename[0] =='.':
+            if (filename[0]) =='.' or (filename[-3:] =="txt"):
               continue          
             file_path = os.path.join(directory_path, filename)
             if os.path.isfile(file_path) and any(file_path.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']) :

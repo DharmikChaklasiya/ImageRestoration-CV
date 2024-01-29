@@ -3,7 +3,6 @@
     "val_ratio": 0.2,
     "num_samples_for_eval": 100,
     "base_output_path": "C:\\Users\\marti\\Documents\\computervision\\integrals\\Part1 2\\100000",
-    "loss_histories": {},
     "train_indices": [
         "104483",
         "101009",

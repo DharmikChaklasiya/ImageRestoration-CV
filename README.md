@@ -20,8 +20,8 @@ Variables to be set by the user:
     input_img_folder  = '/test_images/'
     output_folder = '/Results'
 
-"/test_images" - folder, where you can store your images in subfolders that you want to get tested /see example in the "test_images" folder/. It would produce an output that is saved in "Results" folder. 
-"/Results" - folder that saves the all the output predicted images
+- "/test_images" - folder, where you can store your images in subfolders that you want to get tested /see example in the "test_images" folder/. It would produce an output that is saved in "Results" folder. 
+- "/Results" - folder that saves the all the output predicted images
 
 1. Inputs - focal stacks stored in folder as subfolders /as explained above/. Test.py takes the variable input_img_folder. There are two cases here: if you want to only test the model, then you should not provide GT image and it will just output a predicted image in the "Result" folder. If you have GT images in the same directory, as the focal stacks, named "..._gt", then it will save the predicted output of those images and retrieve a plot with PSNR and SSIM scores.
 2. Outputs - files are outputed in "Result" which is provided with the same name as the folder of the focal stack and _pred prefix. Also a plot of metrics is saved as png.
